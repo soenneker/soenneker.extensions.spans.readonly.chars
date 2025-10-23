@@ -4,6 +4,7 @@ using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using Soenneker.Extensions.Char;
 using Soenneker.Extensions.Spans.Readonly.Bytes;
 
 namespace Soenneker.Extensions.Spans.Readonly.Chars;
@@ -13,6 +14,18 @@ namespace Soenneker.Extensions.Spans.Readonly.Chars;
 /// </summary>
 public static class ReadOnlySpanCharExtension
 {
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsWhiteSpace(this ReadOnlySpan<char> span)
+    {
+        for (var i = 0; i < span.Length; i++)
+        {
+            if (!span[i].IsWhiteSpaceFast())
+                return false;
+        }
+
+        return true;
+    }
+
     /// <summary>Text → SHA-256 hex (UTF-8 by default)</summary>
     [Pure, MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static string ToSha256Hex(this ReadOnlySpan<char> text, Encoding? encoding = null, bool upperCase = true)
