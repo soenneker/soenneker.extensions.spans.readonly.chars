@@ -14,19 +14,86 @@ namespace Soenneker.Extensions.Spans.Readonly.Chars;
 /// </summary>
 public static class ReadOnlySpanCharExtension
 {
+    /// <summary>
+    /// Determines whether all characters in the specified span are white-space characters.
+    /// </summary>
+    /// <param name="span">The span of characters to evaluate.</param>
+    /// <returns>true if every character in the span is a white-space character; otherwise, false.</returns>
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsWhiteSpace(this ReadOnlySpan<char> span)
     {
         for (var i = 0; i < span.Length; i++)
         {
-            if (!span[i].IsWhiteSpaceFast())
+            if (!span[i]
+                    .IsWhiteSpaceFast())
                 return false;
         }
 
         return true;
     }
 
-    /// <summary>Text → SHA-256 hex (UTF-8 by default)</summary>
+    /// <summary>
+    /// Parses a span of characters into an array of non-empty, trimmed substrings that are separated by the specified
+    /// character.
+    /// </summary>
+    /// <remarks>Empty segments and segments consisting only of whitespace are ignored. Each returned
+    /// substring is trimmed of leading and trailing whitespace.</remarks>
+    /// <param name="span">The span of characters to parse for separated values.</param>
+    /// <param name="separator">The character used to separate substrings within the span.</param>
+    /// <returns>An array of non-empty, trimmed substrings. Returns an empty array if no non-empty substrings are found.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string[] SplitTrimmedNonEmpty(this ReadOnlySpan<char> span, char separator)
+    {
+        // pass 1: count non-empty trimmed segments
+        var count = 0;
+        var start = 0;
+
+        for (var i = 0; i <= span.Length; i++)
+        {
+            if (i == span.Length || span[i] == separator)
+            {
+                ReadOnlySpan<char> seg = span.Slice(start, i - start)
+                                             .Trim();
+                if (!seg.IsEmpty)
+                    count++;
+
+                start = i + 1;
+            }
+        }
+
+        if (count == 0)
+            return [];
+
+        // pass 2: allocate exact array + fill
+        var result = new string[count];
+        start = 0;
+        var idx = 0;
+
+        for (var i = 0; i <= span.Length; i++)
+        {
+            if (i == span.Length || span[i] == separator)
+            {
+                ReadOnlySpan<char> seg = span.Slice(start, i - start)
+                                             .Trim();
+                if (!seg.IsEmpty)
+                    result[idx++] = seg.ToString();
+
+                start = i + 1;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the SHA-256 hash of the specified text and returns its hexadecimal string representation.
+    /// </summary>
+    /// <remarks>This method efficiently handles input of any size, using stack allocation for small inputs
+    /// and pooling or streaming for larger ones. The output string contains 64 hexadecimal characters.</remarks>
+    /// <param name="text">The text to compute the SHA-256 hash for.</param>
+    /// <param name="encoding">The character encoding to use when converting the text to bytes. If null, UTF-8 is used.</param>
+    /// <param name="upperCase">true to return the hexadecimal string in uppercase; otherwise, false for lowercase.</param>
+    /// <returns>A hexadecimal string representing the SHA-256 hash of the input text.</returns>
     [Pure, MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static string ToSha256Hex(this ReadOnlySpan<char> text, Encoding? encoding = null, bool upperCase = true)
     {
@@ -60,7 +127,16 @@ public static class ReadOnlySpanCharExtension
         return ToSha256HexStreaming(text, encoding, upperCase);
     }
 
-    // Streaming path for huge inputs (avoids renting a giant buffer)
+    /// <summary>
+    /// Computes the SHA-256 hash of the specified text using the provided encoding and returns the result as a hexadecimal
+    /// string.
+    /// </summary>
+    /// <remarks>This method processes the input text in chunks to minimize memory usage, making it suitable for
+    /// hashing large strings. The output string contains 64 hexadecimal characters.</remarks>
+    /// <param name="text">The text to compute the SHA-256 hash for.</param>
+    /// <param name="encoding">The character encoding to use when converting the text to bytes. Cannot be null.</param>
+    /// <param name="upperCase">true to return the hexadecimal string in uppercase; otherwise, false for lowercase.</param>
+    /// <returns>A hexadecimal string representation of the SHA-256 hash of the input text.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static string ToSha256HexStreaming(ReadOnlySpan<char> text, Encoding encoding, bool upperCase)
     {
