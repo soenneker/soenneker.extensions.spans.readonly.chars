@@ -137,8 +137,8 @@ public static class ReadOnlySpanCharExtension
     /// <param name="encoding">The character encoding to use when converting the text to bytes. Cannot be null.</param>
     /// <param name="upperCase">true to return the hexadecimal string in uppercase; otherwise, false for lowercase.</param>
     /// <returns>A hexadecimal string representation of the SHA-256 hash of the input text.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static string ToSha256HexStreaming(ReadOnlySpan<char> text, Encoding encoding, bool upperCase)
+    [Pure, MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static string ToSha256HexStreaming(ReadOnlySpan<char> text, Encoding encoding, bool upperCase)
     {
         using var ih = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         Encoder encoder = encoding.GetEncoder();
