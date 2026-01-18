@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Soenneker.Extensions.Char;
 using Soenneker.Extensions.Spans.Readonly.Bytes;
+using Soenneker.Utils.PooledStringBuilders;
 
 namespace Soenneker.Extensions.Spans.Readonly.Chars;
 
@@ -143,7 +144,7 @@ public static class ReadOnlySpanCharExtension
     /// <returns>A hexadecimal string representation of the SHA-256 hash of the input text.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the encoder fails to make progress when converting the input text to bytes.</exception>
     [Pure, MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static string ToSha256HexStreaming(ReadOnlySpan<char> text, Encoding encoding, bool upperCase)
+    public static string ToSha256HexStreaming(this ReadOnlySpan<char> text, Encoding encoding, bool upperCase)
     {
         using var ih = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
@@ -225,5 +226,56 @@ public static class ReadOnlySpanCharExtension
 
         trimmed = segment.Slice(start, end - start + 1);
         return true;
+    }
+
+    /// <summary>
+    /// Creates a comma-separated string by joining the trimmed substrings of the specified ranges within the input
+    /// span.
+    /// </summary>
+    /// <remarks>Empty or whitespace-only substrings are ignored. The resulting string contains only
+    /// non-empty, trimmed segments, separated by ", ".</remarks>
+    /// <param name="address">The span of characters containing the source text from which substrings are extracted.</param>
+    /// <param name="ranges">The span of ranges specifying the segments within <paramref name="address"/> to join. Each range defines a
+    /// substring to include.</param>
+    /// <param name="startIndex">The zero-based index in <paramref name="ranges"/> at which to begin joining substrings.</param>
+    /// <param name="count">The number of ranges to process, starting from <paramref name="startIndex"/>.</param>
+    /// <returns>A string consisting of the trimmed substrings, separated by commas and spaces. Returns an empty string if no
+    /// non-empty substrings are found.</returns>
+    [Pure]
+    public static string JoinCommaSeparated(this ReadOnlySpan<char> address, Span<Range> ranges, int startIndex, int count)
+    {
+        // Rough capacity guess to reduce growth; we still only allocate 1 final string.
+        int estimated = 0;
+        for (int i = 0; i < count; i++)
+        {
+            ReadOnlySpan<char> s = address[ranges[startIndex + i]].Trim();
+            if (s.Length == 0)
+                continue;
+
+            if (estimated != 0)
+                estimated += 2; // ", "
+            estimated += s.Length;
+        }
+
+        if (estimated == 0)
+            return string.Empty;
+
+        using var sb = new PooledStringBuilder(estimated);
+
+        bool first = true;
+        for (int i = 0; i < count; i++)
+        {
+            ReadOnlySpan<char> s = address[ranges[startIndex + i]].Trim();
+            if (s.Length == 0)
+                continue;
+
+            if (!first)
+                sb.Append(", ");
+            first = false;
+
+            sb.Append(s);
+        }
+
+        return sb.ToString();
     }
 }
