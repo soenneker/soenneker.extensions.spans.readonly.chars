@@ -278,4 +278,180 @@ public static class ReadOnlySpanCharExtension
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Trims leading and trailing white-space characters from the specified span and returns the resulting string, or
+    /// null if the trimmed span is empty.
+    /// </summary>
+    /// <param name="span">The read-only character span to trim.</param>
+    /// <returns>A string containing the trimmed characters from the span, or null if the trimmed span is empty.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string? TrimToNull(this ReadOnlySpan<char> span)
+    {
+        span = span.Trim();
+        return span.Length == 0 ? null : span.ToString();
+    }
+
+    /// <summary>
+    /// Splits the specified character span into ranges separated by commas and writes the resulting ranges to the
+    /// provided span.
+    /// </summary>
+    /// <remarks>If the number of segments in <paramref name="input"/> exceeds the length of <paramref
+    /// name="ranges"/>, only as many ranges as will fit are written. Empty segments (i.e., consecutive commas or
+    /// leading/trailing commas) are ignored and not included in the output.</remarks>
+    /// <param name="input">The input span of characters to split. Commas (',') are treated as delimiters.</param>
+    /// <param name="ranges">The span to which the resulting ranges are written. Each range represents the start and end indices of a segment
+    /// between commas in the input.</param>
+    /// <returns>The number of ranges written to the <paramref name="ranges"/> span.</returns>
+    public static int SplitCommaRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
+    {
+        int count = 0;
+        int start = 0;
+
+        for (int i = 0; i <= input.Length; i++)
+        {
+            if (i == input.Length || input[i] == ',')
+            {
+                if (count == ranges.Length)
+                    break;
+
+                int len = i - start;
+                if (len > 0)
+                    ranges[count++] = start..i;
+
+                start = i + 1;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Splits the input span into ranges representing non-empty, trimmed lines and writes them to the specified
+    /// destination span.
+    /// </summary>
+    /// <remarks>Lines consisting only of whitespace or newline characters are ignored. If the number of
+    /// non-empty lines exceeds the length of the destination span, only as many ranges as will fit are
+    /// written.</remarks>
+    /// <param name="input">The input character span to process. Each line is identified by standard newline sequences and leading or
+    /// trailing whitespace is ignored when determining if a line is non-empty.</param>
+    /// <param name="ranges">The destination span that receives the ranges of non-empty, trimmed lines within the input. Each range specifies
+    /// the start and end indices of a non-empty line, excluding leading and trailing whitespace.</param>
+    /// <returns>The number of non-empty, trimmed line ranges written to the destination span. This value will not exceed the
+    /// length of the destination span.</returns>
+    public static int SplitNonEmptyLineRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
+    {
+        int count = 0;
+        int pos = 0;
+
+        while (pos < input.Length && count < ranges.Length)
+        {
+            int lineEnd = IndexOfNewline(input, pos);
+            if (lineEnd < 0)
+                lineEnd = input.Length;
+
+            ReadOnlySpan<char> line = input.Slice(pos, lineEnd - pos);
+            line = TrimCrlf(line).Trim();
+
+            if (line.Length != 0)
+            {
+                // Recompute trimmed range bounds relative to original input.
+                // (We trimmed from a slice, so find bounds within that slice.)
+                int leading = LeadingWhitespaceCount(input.Slice(pos, lineEnd - pos));
+                int trailing = TrailingWhitespaceCount(input.Slice(pos, lineEnd - pos));
+                int start = pos + leading;
+                int end = lineEnd - trailing;
+
+                if (start < end)
+                    ranges[count++] = start..end;
+            }
+
+            // Advance past newline sequence
+            pos = lineEnd;
+            while (pos < input.Length)
+            {
+                char c = input[pos];
+                if (c == '\r' || c == '\n')
+                    pos++;
+                else
+                    break;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Searches for the first occurrence of a newline character ('\r' or '\n') in the specified span, starting at the
+    /// given index.
+    /// </summary>
+    /// <param name="input">The span of characters to search for a newline character.</param>
+    /// <param name="start">The zero-based index at which to begin searching within the span. Must be greater than or equal to 0 and less
+    /// than or equal to the length of the span.</param>
+    /// <returns>The zero-based index of the first occurrence of a newline character in the span, or -1 if no newline character
+    /// is found.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int IndexOfNewline(this ReadOnlySpan<char> input, int start)
+    {
+        for (int i = start; i < input.Length; i++)
+        {
+            char c = input[i];
+            if (c == '\r' || c == '\n')
+                return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Removes any leading and trailing carriage return ('\r') and line feed ('\n') characters from the specified
+    /// read-only character span.
+    /// </summary>
+    /// <remarks>This method does not modify the original data; it returns a new span referencing the trimmed
+    /// range within the original span. Only '\r' and '\n' characters at the start or end are removed; other whitespace
+    /// characters are not affected.</remarks>
+    /// <param name="span">The read-only character span to trim.</param>
+    /// <returns>A span that contains the input characters with all leading and trailing '\r' and '\n' characters removed. If no
+    /// such characters are present, the original span is returned.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ReadOnlySpan<char> TrimCrlf(this ReadOnlySpan<char> span)
+    {
+        // Defensive: if caller slices include CR/LF at ends
+        while (span.Length != 0 && (span[0] == '\r' || span[0] == '\n'))
+            span = span.Slice(1);
+        while (span.Length != 0 && (span[^1] == '\r' || span[^1] == '\n'))
+            span = span.Slice(0, span.Length - 1);
+
+        return span;
+    }
+
+    /// <summary>
+    /// Counts the number of consecutive whitespace characters at the start of the specified span.
+    /// </summary>
+    /// <param name="span">The span of characters to examine for leading whitespace.</param>
+    /// <returns>The number of consecutive whitespace characters at the beginning of the span. Returns 0 if the span is empty or
+    /// does not start with whitespace.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int LeadingWhitespaceCount(this ReadOnlySpan<char> span)
+    {
+        int i = 0;
+        while (i < span.Length && span[i].IsWhiteSpaceFast())
+            i++;
+        return i;
+    }
+
+    /// <summary>
+    /// Counts the number of consecutive whitespace characters at the end of the specified span.
+    /// </summary>
+    /// <param name="span">The span of characters to examine for trailing whitespace.</param>
+    /// <returns>The number of consecutive whitespace characters at the end of the span. Returns 0 if there are no trailing
+    /// whitespace characters.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int TrailingWhitespaceCount(this ReadOnlySpan<char> span)
+    {
+        int i = span.Length;
+        while (i > 0 && span[i - 1].IsWhiteSpaceFast())
+            i--;
+        return span.Length - i;
+    }
 }
