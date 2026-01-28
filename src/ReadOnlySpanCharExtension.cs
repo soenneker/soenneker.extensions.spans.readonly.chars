@@ -454,4 +454,49 @@ public static class ReadOnlySpanCharExtension
             i--;
         return span.Length - i;
     }
+
+    /// <summary>
+    /// Attempts to parse a 16-character hexadecimal string into a 64-bit unsigned integer.
+    /// Accepts upper- and lowercase hexadecimal characters.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryParseHexUInt64(this ReadOnlySpan<char> hex, out ulong value)
+    {
+        if ((uint)hex.Length != 16u)
+        {
+            value = default;
+            return false;
+        }
+
+        ulong acc = 0;
+
+        // 16 fixed iterations; JIT typically keeps this very tight.
+        for (int i = 0; i < 16; i++)
+        {
+            uint c = hex[i];
+
+            // Fast path: '0'..'9'
+            uint digit = c - '0';
+            if (digit > 9u)
+            {
+                // Normalize ASCII letters to lowercase: 'A'..'F' -> 'a'..'f'
+                c |= 0x20u;
+
+                digit = c - 'a';
+                if (digit > 5u)
+                {
+                    value = default;
+                    return false;
+                }
+
+                digit += 10u;
+            }
+
+            acc = (acc << 4) | digit;
+        }
+
+        value = acc;
+        return true;
+    }
 }
