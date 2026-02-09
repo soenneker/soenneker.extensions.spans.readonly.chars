@@ -25,7 +25,7 @@ public static class ReadOnlySpanCharExtension
     public static bool IsWhiteSpace(this ReadOnlySpan<char> span)
     {
         ref char r0 = ref MemoryMarshal.GetReference(span);
-        for (int i = 0; i < span.Length; i++)
+        for (var i = 0; i < span.Length; i++)
         {
             if (!Unsafe.Add(ref r0, i).IsWhiteSpaceFast())
                 return false;
@@ -48,11 +48,11 @@ public static class ReadOnlySpanCharExtension
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string[] SplitTrimmedNonEmpty(this ReadOnlySpan<char> span, char separator)
     {
-        int count = 0;
-        int start = 0;
+        var count = 0;
+        var start = 0;
 
         // pass 1: count
-        for (int i = 0; i <= span.Length; i++)
+        for (var i = 0; i <= span.Length; i++)
         {
             if (i == span.Length || span[i] == separator)
             {
@@ -68,10 +68,10 @@ public static class ReadOnlySpanCharExtension
 
         var result = new string[count];
         start = 0;
-        int idx = 0;
+        var idx = 0;
 
         // pass 2: fill
-        for (int i = 0; i <= span.Length; i++)
+        for (var i = 0; i <= span.Length; i++)
         {
             if (i == span.Length || span[i] == separator)
             {
@@ -158,7 +158,7 @@ public static class ReadOnlySpanCharExtension
 
         try
         {
-            for (int i = 0; i < text.Length; i += charChunk)
+            for (var i = 0; i < text.Length; i += charChunk)
             {
                 ReadOnlySpan<char> slice = text.Slice(i, Math.Min(charChunk, text.Length - i));
                 bool flush = (i + slice.Length) >= text.Length;
@@ -175,7 +175,7 @@ public static class ReadOnlySpanCharExtension
                 // If it ever doesn't (exotic encoding edge), fall back to a small loop.
                 if (!completed)
                 {
-                    int offset = 0;
+                    var offset = 0;
                     while (true)
                     {
                         ih.AppendData(buffer, 0, bytesUsed);
@@ -209,7 +209,7 @@ public static class ReadOnlySpanCharExtension
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool TryTrimNonEmpty(ReadOnlySpan<char> segment, out ReadOnlySpan<char> trimmed)
     {
-        int start = 0;
+        var start = 0;
         int end = segment.Length - 1;
 
         while ((uint)start < (uint)segment.Length && segment[start].IsWhiteSpaceFast())
@@ -245,8 +245,8 @@ public static class ReadOnlySpanCharExtension
     public static string JoinCommaSeparated(this ReadOnlySpan<char> address, Span<Range> ranges, int startIndex, int count)
     {
         // Rough capacity guess to reduce growth; we still only allocate 1 final string.
-        int estimated = 0;
-        for (int i = 0; i < count; i++)
+        var estimated = 0;
+        for (var i = 0; i < count; i++)
         {
             ReadOnlySpan<char> s = address[ranges[startIndex + i]].Trim();
             if (s.Length == 0)
@@ -262,8 +262,8 @@ public static class ReadOnlySpanCharExtension
 
         using var sb = new PooledStringBuilder(estimated);
 
-        bool first = true;
-        for (int i = 0; i < count; i++)
+        var first = true;
+        for (var i = 0; i < count; i++)
         {
             ReadOnlySpan<char> s = address[ranges[startIndex + i]].Trim();
             if (s.Length == 0)
@@ -305,10 +305,10 @@ public static class ReadOnlySpanCharExtension
     /// <returns>The number of ranges written to the <paramref name="ranges"/> span.</returns>
     public static int SplitCommaRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
     {
-        int count = 0;
-        int start = 0;
+        var count = 0;
+        var start = 0;
 
-        for (int i = 0; i <= input.Length; i++)
+        for (var i = 0; i <= input.Length; i++)
         {
             if (i == input.Length || input[i] == ',')
             {
@@ -341,8 +341,8 @@ public static class ReadOnlySpanCharExtension
     /// length of the destination span.</returns>
     public static int SplitNonEmptyLineRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
     {
-        int count = 0;
-        int pos = 0;
+        var count = 0;
+        var pos = 0;
 
         while (pos < input.Length && count < ranges.Length)
         {
@@ -426,6 +426,27 @@ public static class ReadOnlySpanCharExtension
     }
 
     /// <summary>
+    /// Counts the number of occurrences of a specified character within a read-only span of characters.
+    /// </summary>
+    /// <remarks>This method is optimized for performance and does not allocate additional memory.</remarks>
+    /// <param name="span">The read-only span of characters to search.</param>
+    /// <param name="c">The character to count within the span.</param>
+    /// <returns>The total number of times the specified character appears in the span.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CountChar(this ReadOnlySpan<char> span, char c)
+    {
+        var count = 0;
+
+        for (var i = 0; i < span.Length; i++)
+        {
+            if (span[i] == c)
+                count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>
     /// Counts the number of consecutive whitespace characters at the start of the specified span.
     /// </summary>
     /// <param name="span">The span of characters to examine for leading whitespace.</param>
@@ -434,7 +455,7 @@ public static class ReadOnlySpanCharExtension
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int LeadingWhitespaceCount(this ReadOnlySpan<char> span)
     {
-        int i = 0;
+        var i = 0;
         while (i < span.Length && span[i].IsWhiteSpaceFast())
             i++;
         return i;
@@ -472,7 +493,7 @@ public static class ReadOnlySpanCharExtension
         ulong acc = 0;
 
         // 16 fixed iterations; JIT typically keeps this very tight.
-        for (int i = 0; i < 16; i++)
+        for (var i = 0; i < 16; i++)
         {
             uint c = hex[i];
 
