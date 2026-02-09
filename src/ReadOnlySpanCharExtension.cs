@@ -358,8 +358,8 @@ public static class ReadOnlySpanCharExtension
             {
                 // Recompute trimmed range bounds relative to original input.
                 // (We trimmed from a slice, so find bounds within that slice.)
-                int leading = LeadingWhitespaceCount(input.Slice(pos, lineEnd - pos));
-                int trailing = TrailingWhitespaceCount(input.Slice(pos, lineEnd - pos));
+                int leading = input.Slice(pos, lineEnd - pos).LeadingWhitespaceCount();
+                int trailing = input.Slice(pos, lineEnd - pos).TrailingWhitespaceCount();
                 int start = pos + leading;
                 int end = lineEnd - trailing;
 
@@ -372,7 +372,7 @@ public static class ReadOnlySpanCharExtension
             while (pos < input.Length)
             {
                 char c = input[pos];
-                if (c == '\r' || c == '\n')
+                if (c is '\r' or '\n')
                     pos++;
                 else
                     break;
@@ -397,7 +397,7 @@ public static class ReadOnlySpanCharExtension
         for (int i = start; i < input.Length; i++)
         {
             char c = input[i];
-            if (c == '\r' || c == '\n')
+            if (c is '\r' or '\n')
                 return i;
         }
 
@@ -508,7 +508,7 @@ public static class ReadOnlySpanCharExtension
                 digit = c - 'a';
                 if (digit > 5u)
                 {
-                    value = default;
+                    value = 0;
                     return false;
                 }
 
