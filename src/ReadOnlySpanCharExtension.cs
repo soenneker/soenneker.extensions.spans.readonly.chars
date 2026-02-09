@@ -1,13 +1,14 @@
-﻿using System;
+﻿using Soenneker.Extensions.Char;
+using Soenneker.Extensions.Spans.Readonly.Bytes;
+using Soenneker.Utils.PooledStringBuilders;
+using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using Soenneker.Extensions.Char;
-using Soenneker.Extensions.Spans.Readonly.Bytes;
-using Soenneker.Utils.PooledStringBuilders;
 
 namespace Soenneker.Extensions.Spans.Readonly.Chars;
 
@@ -519,5 +520,54 @@ public static class ReadOnlySpanCharExtension
 
         value = acc;
         return true;
+    }
+
+    /// <summary>
+    /// Advances the specified index to the first non-whitespace character in the provided read-only character span.
+    /// </summary>
+    /// <remarks>The method updates the index in place. Callers should ensure that the index is within the
+    /// bounds of the span before calling this method to avoid out-of-range access.</remarks>
+    /// <param name="span">A read-only span of characters to examine for leading whitespace.</param>
+    /// <param name="idx">A reference to the index within the span. This value is incremented to skip over any consecutive whitespace
+    /// characters and will point to the first non-whitespace character, or the end of the span if only whitespace
+    /// remains.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void SkipWhitespace(this ReadOnlySpan<char> span, ref int idx)
+    {
+        while ((uint)idx < (uint)span.Length && char.IsWhiteSpace(span[idx]))
+            idx++;
+    }
+
+    /// <summary>
+    /// Extracts unique tokens from the specified read-only span of characters and adds them to the provided hash set.
+    /// </summary>
+    /// <remarks>Tokens are defined as contiguous sequences of non-whitespace characters. This method does not
+    /// modify the input span or remove existing entries from the hash set; it only adds new tokens that are not already
+    /// present.</remarks>
+    /// <param name="value">A read-only span of characters from which tokens are extracted. Leading and trailing whitespace is ignored.</param>
+    /// <param name="set">The hash set to which unique tokens will be added. If a token already exists in the set, it is not added again.</param>
+    public static void AddTokens(this ReadOnlySpan<char> value, HashSet<string> set)
+    {
+        var k = 0;
+
+        while (k < value.Length)
+        {
+            // skip leading ws
+            while ((uint)k < (uint)value.Length && char.IsWhiteSpace(value[k]))
+                k++;
+
+            if (k >= value.Length)
+                break;
+
+            int start = k;
+
+            // scan token
+            while ((uint)k < (uint)value.Length && !char.IsWhiteSpace(value[k]))
+                k++;
+
+            ReadOnlySpan<char> token = value.Slice(start, k - start);
+            if (!token.IsEmpty)
+                set.Add(token.ToString());
+        }
     }
 }
