@@ -15,18 +15,22 @@ namespace Soenneker.Extensions.Spans.Readonly.Chars;
 public static class ReadOnlySpanCharExtension
 {
     /// <summary>
-    /// Determines whether all characters in the specified span are Unicode white-space characters.
+    /// Determines whether all characters in the specified read-only character span are white-space characters.
     /// </summary>
-    /// <remarks>This method returns true for empty spans, as there are no non-white-space characters present.
-    /// The definition of white-space is based on Unicode standards and includes characters such as space, tab, and line
-    /// breaks.</remarks>
-    /// <param name="span">The read-only span of characters to evaluate for white-space.</param>
-    /// <returns>true if every character in the span is a Unicode white-space character; otherwise, false.</returns>
+    /// <remarks>White-space characters are determined using a fast check that is equivalent to calling
+    /// char.IsWhiteSpace for each character. The method returns true for empty spans.</remarks>
+    /// <param name="span">The read-only span of characters to evaluate.</param>
+    /// <returns>true if every character in the span is a white-space character; otherwise, false.</returns>
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsWhiteSpace(this ReadOnlySpan<char> span)
     {
+        int len = span.Length;
+        if (len == 0)
+            return true;
+
         ref char r0 = ref MemoryMarshal.GetReference(span);
-        for (var i = 0; i < span.Length; i++)
+
+        for (int i = 0; i < len; i++)
         {
             if (!Unsafe.Add(ref r0, i).IsWhiteSpaceFast())
                 return false;
@@ -46,44 +50,94 @@ public static class ReadOnlySpanCharExtension
     /// <param name="separator">The character used to separate substrings within the span.</param>
     /// <returns>An array of strings containing the trimmed, non-empty substrings. Returns an empty array if no non-empty
     /// substrings are found.</returns>
-    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Pure]
     public static string[] SplitTrimmedNonEmpty(this ReadOnlySpan<char> span, char separator)
     {
-        var count = 0;
-        var start = 0;
-
-        // pass 1: count
-        for (var i = 0; i <= span.Length; i++)
-        {
-            if (i == span.Length || span[i] == separator)
-            {
-                if (TryTrimNonEmpty(span.Slice(start, i - start), out _))
-                    count++;
-
-                start = i + 1;
-            }
-        }
-
-        if (count == 0)
+        int len = span.Length;
+        if (len == 0)
             return [];
 
-        var result = new string[count];
-        start = 0;
-        var idx = 0;
+        // stack starts with room for 16 segments (32 ints: start/len pairs)
+        const int initialSegs = 16;
+        const int stackInts = initialSegs * 2;
 
-        // pass 2: fill
-        for (var i = 0; i <= span.Length; i++)
+        int[]? rented = null;
+        Span<int> pairs = stackalloc int[stackInts];
+        var segCount = 0;
+
+        ref char r0 = ref MemoryMarshal.GetReference(span);
+
+        var start = 0;
+
+        for (var i = 0; i <= len; i++)
         {
-            if (i == span.Length || span[i] == separator)
+            if (i == len || Unsafe.Add(ref r0, i) == separator)
             {
-                if (TryTrimNonEmpty(span.Slice(start, i - start), out ReadOnlySpan<char> trimmed))
-                    result[idx++] = trimmed.ToString();
+                int segLen = i - start;
+                if (segLen > 0)
+                {
+                    TrimBoundsFast(span, start, i, out int tStart, out int tLen);
+                    if (tLen != 0)
+                    {
+                        // ensure capacity for 2 ints
+                        if ((segCount * 2) == pairs.Length)
+                        {
+                            int newSize = pairs.Length * 2;
+                            int[] newArr = ArrayPool<int>.Shared.Rent(newSize);
+                            pairs.CopyTo(newArr);
+                            if (rented is not null)
+                                ArrayPool<int>.Shared.Return(rented, clearArray: false);
+                            rented = newArr;
+                            pairs = newArr;
+                        }
+
+                        int p = segCount * 2;
+                        pairs[p] = tStart;
+                        pairs[p + 1] = tLen;
+                        segCount++;
+                    }
+                }
 
                 start = i + 1;
             }
         }
 
+        if (segCount == 0)
+        {
+            if (rented is not null)
+                ArrayPool<int>.Shared.Return(rented, clearArray: false);
+            return [];
+        }
+
+        var result = new string[segCount];
+        for (var i = 0; i < segCount; i++)
+        {
+            int p = i * 2;
+            result[i] = span.Slice(pairs[p], pairs[p + 1])
+                            .ToString();
+        }
+
+        if (rented is not null)
+            ArrayPool<int>.Shared.Return(rented, clearArray: false);
         return result;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static void TrimBoundsFast(ReadOnlySpan<char> s, int start, int end, out int trimmedStart, out int trimmedLen)
+        {
+            int i = start;
+            while (i < end && s[i]
+                       .IsWhiteSpaceFast())
+                i++;
+
+            int j = end - 1;
+            while (j >= i && s[j]
+                       .IsWhiteSpaceFast())
+                j--;
+
+            trimmedStart = i;
+            int l = j - i + 1;
+            trimmedLen = l > 0 ? l : 0;
+        }
     }
 
     /// <summary>
@@ -109,7 +163,7 @@ public static class ReadOnlySpanCharExtension
         {
             Span<byte> tmp = byteCount == 0 ? [] : stackalloc byte[byteCount];
             encoding.GetBytes(text, tmp);
-            return ((ReadOnlySpan<byte>)tmp).ToSha256Hex(upperCase);
+            return tmp.ToSha256Hex(upperCase);
         }
 
         // Pool fallback
@@ -162,15 +216,9 @@ public static class ReadOnlySpanCharExtension
             for (var i = 0; i < text.Length; i += charChunk)
             {
                 ReadOnlySpan<char> slice = text.Slice(i, Math.Min(charChunk, text.Length - i));
-                bool flush = (i + slice.Length) >= text.Length;
+                bool flush = i + slice.Length >= text.Length;
 
-                encoder.Convert(
-                    slice,
-                    buffer,
-                    flush,
-                    out int charsUsed,
-                    out int bytesUsed,
-                    out bool completed);
+                encoder.Convert(slice, buffer, flush, out int charsUsed, out int bytesUsed, out bool completed);
 
                 // With GetMaxByteCount(charChunk), we should always complete in one shot.
                 // If it ever doesn't (exotic encoding edge), fall back to a small loop.
@@ -213,10 +261,12 @@ public static class ReadOnlySpanCharExtension
         var start = 0;
         int end = segment.Length - 1;
 
-        while ((uint)start < (uint)segment.Length && segment[start].IsWhiteSpaceFast())
+        while ((uint)start < (uint)segment.Length && segment[start]
+                   .IsWhiteSpaceFast())
             start++;
 
-        while (end >= start && segment[end].IsWhiteSpaceFast())
+        while (end >= start && segment[end]
+                   .IsWhiteSpaceFast())
             end--;
 
         if (end < start)
@@ -245,39 +295,97 @@ public static class ReadOnlySpanCharExtension
     [Pure]
     public static string JoinCommaSeparated(this ReadOnlySpan<char> address, Span<Range> ranges, int startIndex, int count)
     {
-        // Rough capacity guess to reduce growth; we still only allocate 1 final string.
-        var estimated = 0;
-        for (var i = 0; i < count; i++)
-        {
-            ReadOnlySpan<char> s = address[ranges[startIndex + i]].Trim();
-            if (s.Length == 0)
-                continue;
-
-            if (estimated != 0)
-                estimated += 2; // ", "
-            estimated += s.Length;
-        }
-
-        if (estimated == 0)
+        if ((uint)startIndex > (uint)ranges.Length || count <= 0)
             return string.Empty;
 
-        using var sb = new PooledStringBuilder(estimated);
+        int max = ranges.Length - startIndex;
+        if (count > max)
+            count = max;
 
-        var first = true;
-        for (var i = 0; i < count; i++)
+        const int stackThreshold = 128;
+
+        int[]? rented = null;
+        Span<int> pairs = count <= stackThreshold
+            ? stackalloc int[count * 2]
+            : (rented = ArrayPool<int>.Shared.Rent(count * 2));
+
+        var segCount = 0;
+        var totalChars = 0;
+
+        try
         {
-            ReadOnlySpan<char> s = address[ranges[startIndex + i]].Trim();
-            if (s.Length == 0)
-                continue;
+            for (var i = 0; i < count; i++)
+            {
+                Range r = ranges[startIndex + i];
+                GetStartEnd(r, address.Length, out int segStart, out int segEnd);
 
-            if (!first)
-                sb.Append(", ");
-            first = false;
+                TrimBounds(address, segStart, segEnd, out int tStart, out int tLen);
+                if (tLen == 0)
+                    continue;
 
-            sb.Append(s);
+                int p = segCount * 2;
+                pairs[p] = tStart;
+                pairs[p + 1] = tLen;
+                totalChars += tLen;
+                segCount++;
+            }
+
+            if (segCount == 0)
+                return string.Empty;
+
+            int finalLen = totalChars + (segCount - 1) * 2;
+
+            using var sb = new PooledStringBuilder(finalLen);
+
+            for (var i = 0; i < segCount; i++)
+            {
+                if (i != 0)
+                    sb.Append(", ");
+
+                int p = i * 2;
+                sb.Append(address.Slice(pairs[p], pairs[p + 1]));
+            }
+
+            return sb.ToString();
         }
+        finally
+        {
+            if (rented is not null)
+                ArrayPool<int>.Shared.Return(rented, clearArray: false);
+        }
+    }
 
-        return sb.ToString();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void GetStartEnd(in Range range, int length, out int start, out int end)
+    {
+        start = range.Start.IsFromEnd ? length - range.Start.Value : range.Start.Value;
+        end = range.End.IsFromEnd ? length - range.End.Value : range.End.Value;
+
+        // Clamp to keep it robust if callers pass odd ranges.
+        if ((uint)start > (uint)length)
+            start = length;
+        if ((uint)end > (uint)length)
+            end = length;
+        if (end < start)
+            end = start;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void TrimBounds(ReadOnlySpan<char> s, int start, int end, out int trimmedStart, out int trimmedLen)
+    {
+        int i = start;
+        while (i < end && s[i]
+                   .IsWhiteSpaceFast())
+            i++;
+
+        int j = end - 1;
+        while (j >= i && s[j]
+                   .IsWhiteSpaceFast())
+            j--;
+
+        trimmedStart = i;
+        int len = j - i + 1;
+        trimmedLen = len > 0 ? len : 0;
     }
 
     /// <summary>
@@ -294,34 +402,35 @@ public static class ReadOnlySpanCharExtension
     }
 
     /// <summary>
-    /// Splits the specified character span into ranges separated by commas and writes the resulting ranges to the
-    /// provided span.
+    /// Splits a read-only character span into ranges separated by commas and writes the resulting ranges to the
+    /// specified destination span.
     /// </summary>
-    /// <remarks>If the number of segments in <paramref name="input"/> exceeds the length of <paramref
-    /// name="ranges"/>, only as many ranges as will fit are written. Empty segments (i.e., consecutive commas or
-    /// leading/trailing commas) are ignored and not included in the output.</remarks>
-    /// <param name="input">The input span of characters to split. Commas (',') are treated as delimiters.</param>
-    /// <param name="ranges">The span to which the resulting ranges are written. Each range represents the start and end indices of a segment
-    /// between commas in the input.</param>
-    /// <returns>The number of ranges written to the <paramref name="ranges"/> span.</returns>
+    /// <remarks>Empty segments (consecutive commas or leading/trailing commas) are ignored. If the number of
+    /// segments exceeds the length of the destination span, only the first ranges.Length segments are
+    /// returned.</remarks>
+    /// <param name="input">The input span of characters to split into comma-separated ranges.</param>
+    /// <param name="ranges">The destination span that receives the resulting ranges. Each range represents the start and end indices of a
+    /// segment between commas in the input.</param>
+    /// <returns>The number of ranges written to the destination span. This value will not exceed the length of the destination
+    /// span.</returns>
     public static int SplitCommaRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
     {
         var count = 0;
         var start = 0;
+        var i = 0;
+        int len = input.Length;
 
-        for (var i = 0; i <= input.Length; i++)
+        while (i < len && count < ranges.Length)
         {
-            if (i == input.Length || input[i] == ',')
-            {
-                if (count == ranges.Length)
-                    break;
+            // scan until comma or end
+            while (i < len && input[i] != ',')
+                i++;
 
-                int len = i - start;
-                if (len > 0)
-                    ranges[count++] = start..i;
+            if (i > start) // non-empty segment
+                ranges[count++] = start..i;
 
-                start = i + 1;
-            }
+            i++; // skip comma (or move past end by 1; fine)
+            start = i;
         }
 
         return count;
@@ -340,43 +449,48 @@ public static class ReadOnlySpanCharExtension
     /// the start and end indices of a non-empty line, excluding leading and trailing whitespace.</param>
     /// <returns>The number of non-empty, trimmed line ranges written to the destination span. This value will not exceed the
     /// length of the destination span.</returns>
+    [Pure]
     public static int SplitNonEmptyLineRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
     {
         var count = 0;
         var pos = 0;
+        int len = input.Length;
 
-        while (pos < input.Length && count < ranges.Length)
+        while (pos < len && count < ranges.Length)
         {
-            int lineEnd = IndexOfNewline(input, pos);
-            if (lineEnd < 0)
-                lineEnd = input.Length;
-
-            ReadOnlySpan<char> line = input.Slice(pos, lineEnd - pos);
-            line = TrimCrlf(line).Trim();
-
-            if (line.Length != 0)
+            // Find end of line (first \r or \n)
+            int lineEnd = pos;
+            while (lineEnd < len)
             {
-                // Recompute trimmed range bounds relative to original input.
-                // (We trimmed from a slice, so find bounds within that slice.)
-                int leading = input.Slice(pos, lineEnd - pos).LeadingWhitespaceCount();
-                int trailing = input.Slice(pos, lineEnd - pos).TrailingWhitespaceCount();
-                int start = pos + leading;
-                int end = lineEnd - trailing;
-
-                if (start < end)
-                    ranges[count++] = start..end;
-            }
-
-            // Advance past newline sequence
-            pos = lineEnd;
-            while (pos < input.Length)
-            {
-                char c = input[pos];
+                char c = input[lineEnd];
                 if (c is '\r' or '\n')
-                    pos++;
-                else
                     break;
+                lineEnd++;
             }
+
+            // Trim whitespace within [pos, lineEnd)
+            int start = pos;
+            while (start < lineEnd && input[start]
+                       .IsWhiteSpaceFast())
+                start++;
+
+            int end = lineEnd;
+            while (end > start && input[end - 1]
+                       .IsWhiteSpaceFast())
+                end--;
+
+            if (start < end)
+                ranges[count++] = start..end;
+
+            // Advance past newline sequence: \r\n or single \r or \n
+            if (lineEnd < len)
+            {
+                char nl = input[lineEnd++];
+                if (nl == '\r' && lineEnd < len && input[lineEnd] == '\n')
+                    lineEnd++;
+            }
+
+            pos = lineEnd;
         }
 
         return count;
@@ -394,14 +508,11 @@ public static class ReadOnlySpanCharExtension
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int IndexOfNewline(this ReadOnlySpan<char> input, int start)
     {
-        for (int i = start; i < input.Length; i++)
-        {
-            char c = input[i];
-            if (c is '\r' or '\n')
-                return i;
-        }
+        if ((uint)start >= (uint)input.Length)
+            return -1;
 
-        return -1;
+        int idx = input.Slice(start).IndexOfAny('\r', '\n');
+        return idx < 0 ? -1 : start + idx;
     }
 
     /// <summary>
@@ -417,13 +528,24 @@ public static class ReadOnlySpanCharExtension
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ReadOnlySpan<char> TrimCrlf(this ReadOnlySpan<char> span)
     {
-        // Defensive: if caller slices include CR/LF at ends
-        while (span.Length != 0 && (span[0] == '\r' || span[0] == '\n'))
-            span = span.Slice(1);
-        while (span.Length != 0 && (span[^1] == '\r' || span[^1] == '\n'))
-            span = span.Slice(0, span.Length - 1);
+        var start = 0;
+        int end = span.Length;
 
-        return span;
+        while (start < end)
+        {
+            char c = span[start];
+            if (c != '\r' && c != '\n') break;
+            start++;
+        }
+
+        while (end > start)
+        {
+            char c = span[end - 1];
+            if (c != '\r' && c != '\n') break;
+            end--;
+        }
+
+        return span.Slice(start, end - start);
     }
 
     /// <summary>
@@ -435,17 +557,7 @@ public static class ReadOnlySpanCharExtension
     /// <returns>The total number of times the specified character appears in the span.</returns>
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int CountChar(this ReadOnlySpan<char> span, char c)
-    {
-        var count = 0;
-
-        for (var i = 0; i < span.Length; i++)
-        {
-            if (span[i] == c)
-                count++;
-        }
-
-        return count;
-    }
+        => span.Count(c); // System.MemoryExtensions.Count
 
     /// <summary>
     /// Counts the number of consecutive whitespace characters at the start of the specified span.
@@ -457,7 +569,8 @@ public static class ReadOnlySpanCharExtension
     public static int LeadingWhitespaceCount(this ReadOnlySpan<char> span)
     {
         var i = 0;
-        while (i < span.Length && span[i].IsWhiteSpaceFast())
+        while (i < span.Length && span[i]
+                   .IsWhiteSpaceFast())
             i++;
         return i;
     }
@@ -472,7 +585,8 @@ public static class ReadOnlySpanCharExtension
     public static int TrailingWhitespaceCount(this ReadOnlySpan<char> span)
     {
         int i = span.Length;
-        while (i > 0 && span[i - 1].IsWhiteSpaceFast())
+        while (i > 0 && span[i - 1]
+                   .IsWhiteSpaceFast())
             i--;
         return span.Length - i;
     }
@@ -481,45 +595,51 @@ public static class ReadOnlySpanCharExtension
     /// Attempts to parse a 16-character hexadecimal string into a 64-bit unsigned integer.
     /// Accepts upper- and lowercase hexadecimal characters.
     /// </summary>
-    [Pure]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool TryParseHexUInt64(this ReadOnlySpan<char> hex, out ulong value)
     {
         if ((uint)hex.Length != 16u)
         {
-            value = default;
+            value = 0;
             return false;
         }
 
+        ref char r0 = ref MemoryMarshal.GetReference(hex);
+
         ulong acc = 0;
 
-        // 16 fixed iterations; JIT typically keeps this very tight.
-        for (var i = 0; i < 16; i++)
+        for (var i = 0; i < 16; i += 2)
         {
-            uint c = hex[i];
-
-            // Fast path: '0'..'9'
-            uint digit = c - '0';
-            if (digit > 9u)
+            if (!TryHexNibble(Unsafe.Add(ref r0, i), out uint hi) || !TryHexNibble(Unsafe.Add(ref r0, i + 1), out uint lo))
             {
-                // Normalize ASCII letters to lowercase: 'A'..'F' -> 'a'..'f'
-                c |= 0x20u;
-
-                digit = c - 'a';
-                if (digit > 5u)
-                {
-                    value = 0;
-                    return false;
-                }
-
-                digit += 10u;
+                value = 0;
+                return false;
             }
 
-            acc = (acc << 4) | digit;
+            acc = (acc << 8) | ((hi << 4) | lo);
         }
 
         value = acc;
         return true;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static bool TryHexNibble(uint c, out uint digit)
+        {
+            digit = c - '0';
+            if (digit <= 9u)
+                return true;
+
+            c |= 0x20u;
+            digit = c - 'a';
+            if (digit <= 5u)
+            {
+                digit += 10u;
+                return true;
+            }
+
+            digit = 0;
+            return false;
+        }
     }
 
     /// <summary>
@@ -534,7 +654,8 @@ public static class ReadOnlySpanCharExtension
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void SkipWhitespace(this ReadOnlySpan<char> span, ref int idx)
     {
-        while ((uint)idx < (uint)span.Length && char.IsWhiteSpace(span[idx]))
+        while ((uint)idx < (uint)span.Length && span[idx]
+                   .IsWhiteSpaceFast())
             idx++;
     }
 
@@ -552,8 +673,8 @@ public static class ReadOnlySpanCharExtension
 
         while (k < value.Length)
         {
-            // skip leading ws
-            while ((uint)k < (uint)value.Length && char.IsWhiteSpace(value[k]))
+            while ((uint)k < (uint)value.Length && value[k]
+                       .IsWhiteSpaceFast())
                 k++;
 
             if (k >= value.Length)
@@ -561,13 +682,115 @@ public static class ReadOnlySpanCharExtension
 
             int start = k;
 
-            // scan token
-            while ((uint)k < (uint)value.Length && !char.IsWhiteSpace(value[k]))
+            while ((uint)k < (uint)value.Length && !value[k]
+                       .IsWhiteSpaceFast())
                 k++;
 
-            ReadOnlySpan<char> token = value.Slice(start, k - start);
-            if (!token.IsEmpty)
-                set.Add(token.ToString());
+            set.Add(value.Slice(start, k - start)
+                         .ToString());
         }
+    }
+
+    /// <summary>
+    /// Determines whether two ASCII character spans are equal, using a case-insensitive comparison.
+    /// </summary>
+    /// <remarks>This method performs a case-insensitive comparison using ASCII casing rules only. Non-ASCII
+    /// characters are compared using their exact values without case folding. The spans must be of equal length for the
+    /// comparison to succeed.</remarks>
+    /// <param name="a">The first read-only span of characters to compare.</param>
+    /// <param name="b">The second read-only span of characters to compare.</param>
+    /// <returns>true if the spans are equal when compared case-insensitively using ASCII rules; otherwise, false.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool EqualsAsciiIgnoreCase(this ReadOnlySpan<char> a, ReadOnlySpan<char> b)
+    {
+        if (a.Length != b.Length)
+            return false;
+
+        ref char ra = ref MemoryMarshal.GetReference(a);
+        ref char rb = ref MemoryMarshal.GetReference(b);
+
+        int len = a.Length;
+
+        for (var i = 0; i < len; i++)
+        {
+            uint ac = Unsafe.Add(ref ra, i);
+            uint bc = Unsafe.Add(ref rb, i);
+
+            if (ac == bc)
+                continue;
+
+            if ((ac | bc) > 0x7Fu)
+                return false;
+
+            if (ac - 'A' <= 25u)
+                ac += 32u;
+            if (bc - 'A' <= 25u)
+                bc += 32u;
+
+            if (ac != bc)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Determines whether two ASCII character spans are equal, using a case-insensitive comparison. Assumes both spans
+    /// contain only ASCII characters.
+    /// </summary>
+    /// <remarks>This method does not validate that the input spans contain only ASCII characters. Supplying
+    /// non-ASCII input may result in incorrect comparisons. The spans must be of equal length.</remarks>
+    /// <param name="a">The first span of characters to compare. Must contain only ASCII characters.</param>
+    /// <param name="b">The second span of characters to compare. Must contain only ASCII characters and have the same length as
+    /// <paramref name="a"/>.</param>
+    /// <returns>true if the spans are equal when compared case-insensitively; otherwise, false.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool EqualsAsciiIgnoreCase_AssumeAscii(this ReadOnlySpan<char> a, ReadOnlySpan<char> b)
+    {
+        if (a.Length != b.Length)
+            return false;
+
+        ref char ra = ref MemoryMarshal.GetReference(a);
+        ref char rb = ref MemoryMarshal.GetReference(b);
+
+        int len = a.Length;
+
+        for (var i = 0; i < len; i++)
+        {
+            uint ac = Unsafe.Add(ref ra, i);
+            uint bc = Unsafe.Add(ref rb, i);
+
+            if (ac == bc)
+                continue;
+
+            if (ac - 'A' <= 25u)
+                ac += 32u;
+            if (bc - 'A' <= 25u)
+                bc += 32u;
+
+            if (ac != bc)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Determines whether all characters in the specified span are ASCII characters.
+    /// </summary>
+    /// <param name="span">The span of characters to evaluate.</param>
+    /// <returns>true if every character in the span is an ASCII character; otherwise, false.</returns>
+    [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsAscii(this ReadOnlySpan<char> span)
+    {
+        ref char r0 = ref MemoryMarshal.GetReference(span);
+
+        for (var i = 0; i < span.Length; i++)
+        {
+            if (Unsafe.Add(ref r0, i) > 0x7Fu)
+                return false;
+        }
+
+        return true;
     }
 }
