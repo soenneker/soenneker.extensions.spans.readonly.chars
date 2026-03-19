@@ -57,19 +57,25 @@ public static class ReadOnlySpanCharExtension
         if (len == 0)
             return [];
 
-        // stack starts with room for 16 segments (32 ints: start/len pairs)
+        if (span.IndexOf(separator) < 0)
+        {
+            if (!TryTrimNonEmpty(span, out ReadOnlySpan<char> trimmed))
+                return [];
+
+            return [trimmed.ToString()];
+        }
+
         const int initialSegs = 16;
         const int stackInts = initialSegs * 2;
 
         int[]? rented = null;
         Span<int> pairs = stackalloc int[stackInts];
-        var segCount = 0;
+        int segCount = 0;
 
         ref char r0 = ref MemoryMarshal.GetReference(span);
+        int start = 0;
 
-        var start = 0;
-
-        for (var i = 0; i <= len; i++)
+        for (int i = 0; i <= len; i++)
         {
             if (i == len || Unsafe.Add(ref r0, i) == separator)
             {
@@ -79,14 +85,15 @@ public static class ReadOnlySpanCharExtension
                     TrimBoundsFast(span, start, i, out int tStart, out int tLen);
                     if (tLen != 0)
                     {
-                        // ensure capacity for 2 ints
                         if ((segCount * 2) == pairs.Length)
                         {
                             int newSize = pairs.Length * 2;
                             int[] newArr = ArrayPool<int>.Shared.Rent(newSize);
-                            pairs.CopyTo(newArr);
+                            pairs[..(segCount * 2)].CopyTo(newArr);
+
                             if (rented is not null)
                                 ArrayPool<int>.Shared.Return(rented, clearArray: false);
+
                             rented = newArr;
                             pairs = newArr;
                         }
@@ -106,32 +113,42 @@ public static class ReadOnlySpanCharExtension
         {
             if (rented is not null)
                 ArrayPool<int>.Shared.Return(rented, clearArray: false);
+
             return [];
         }
 
-        var result = new string[segCount];
-        for (var i = 0; i < segCount; i++)
+        if (segCount == 1)
+        {
+            string single = span.Slice(pairs[0], pairs[1]).ToString();
+
+            if (rented is not null)
+                ArrayPool<int>.Shared.Return(rented, clearArray: false);
+
+            return [single];
+        }
+
+        string[] result = new string[segCount];
+
+        for (int i = 0; i < segCount; i++)
         {
             int p = i * 2;
-            result[i] = span.Slice(pairs[p], pairs[p + 1])
-                            .ToString();
+            result[i] = span.Slice(pairs[p], pairs[p + 1]).ToString();
         }
 
         if (rented is not null)
             ArrayPool<int>.Shared.Return(rented, clearArray: false);
+
         return result;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static void TrimBoundsFast(ReadOnlySpan<char> s, int start, int end, out int trimmedStart, out int trimmedLen)
         {
             int i = start;
-            while (i < end && s[i]
-                       .IsWhiteSpaceFast())
+            while (i < end && s[i].IsWhiteSpaceFast())
                 i++;
 
             int j = end - 1;
-            while (j >= i && s[j]
-                       .IsWhiteSpaceFast())
+            while (j >= i && s[j].IsWhiteSpaceFast())
                 j--;
 
             trimmedStart = i;
@@ -224,7 +241,6 @@ public static class ReadOnlySpanCharExtension
                 // If it ever doesn't (exotic encoding edge), fall back to a small loop.
                 if (!completed)
                 {
-                    var offset = 0;
                     while (true)
                     {
                         ih.AppendData(buffer, 0, bytesUsed);
@@ -332,6 +348,9 @@ public static class ReadOnlySpanCharExtension
 
             if (segCount == 0)
                 return string.Empty;
+
+            if (segCount == 1)
+                return address.Slice(pairs[0], pairs[1]).ToString();
 
             int finalLen = totalChars + (segCount - 1) * 2;
 
@@ -452,45 +471,34 @@ public static class ReadOnlySpanCharExtension
     [Pure]
     public static int SplitNonEmptyLineRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
     {
-        var count = 0;
-        var pos = 0;
+        int count = 0;
+        int pos = 0;
         int len = input.Length;
 
         while (pos < len && count < ranges.Length)
         {
-            // Find end of line (first \r or \n)
-            int lineEnd = pos;
-            while (lineEnd < len)
-            {
-                char c = input[lineEnd];
-                if (c is '\r' or '\n')
-                    break;
-                lineEnd++;
-            }
+            int rel = input.Slice(pos).IndexOfAny('\r', '\n');
+            int lineEnd = rel < 0 ? len : pos + rel;
 
-            // Trim whitespace within [pos, lineEnd)
             int start = pos;
-            while (start < lineEnd && input[start]
-                       .IsWhiteSpaceFast())
+            while (start < lineEnd && input[start].IsWhiteSpaceFast())
                 start++;
 
             int end = lineEnd;
-            while (end > start && input[end - 1]
-                       .IsWhiteSpaceFast())
+            while (end > start && input[end - 1].IsWhiteSpaceFast())
                 end--;
 
             if (start < end)
                 ranges[count++] = start..end;
 
-            // Advance past newline sequence: \r\n or single \r or \n
-            if (lineEnd < len)
-            {
-                char nl = input[lineEnd++];
-                if (nl == '\r' && lineEnd < len && input[lineEnd] == '\n')
-                    lineEnd++;
-            }
+            if (lineEnd >= len)
+                break;
 
-            pos = lineEnd;
+            int next = lineEnd + 1;
+            if (input[lineEnd] == '\r' && next < len && input[next] == '\n')
+                next++;
+
+            pos = next;
         }
 
         return count;
