@@ -2,7 +2,6 @@ using AwesomeAssertions;
 using Soenneker.Tests.Unit;
 using System;
 using System.Collections.Generic;
-using Xunit;
 
 namespace Soenneker.Extensions.Spans.Readonly.Chars.Tests;
 
@@ -10,28 +9,28 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 {
     #region IsWhiteSpace Tests
 
-    [Fact]
+    [Test]
     public void IsWhiteSpace_EmptySpan_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "";
         span.IsWhiteSpace().Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void IsWhiteSpace_AllWhitespace_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "   \t\r\n  ";
         span.IsWhiteSpace().Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void IsWhiteSpace_ContainsNonWhitespace_ReturnsFalse()
     {
         ReadOnlySpan<char> span = "  a  ";
         span.IsWhiteSpace().Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void IsWhiteSpace_NoWhitespace_ReturnsFalse()
     {
         ReadOnlySpan<char> span = "hello";
@@ -42,7 +41,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region SplitTrimmedNonEmpty Tests
 
-    [Fact]
+    [Test]
     public void SplitTrimmedNonEmpty_EmptySpan_ReturnsEmptyArray()
     {
         ReadOnlySpan<char> span = "";
@@ -50,7 +49,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().BeEmpty();
     }
 
-    [Fact]
+    [Test]
     public void SplitTrimmedNonEmpty_SingleValue_ReturnsSingleElement()
     {
         ReadOnlySpan<char> span = "hello";
@@ -59,7 +58,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result[0].Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void SplitTrimmedNonEmpty_MultipleValues_ReturnsAllElements()
     {
         ReadOnlySpan<char> span = "a,b,c";
@@ -70,7 +69,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result[2].Should().Be("c");
     }
 
-    [Fact]
+    [Test]
     public void SplitTrimmedNonEmpty_ValuesWithWhitespace_ReturnsTrimmedElements()
     {
         ReadOnlySpan<char> span = "  a  ,  b  ,  c  ";
@@ -81,7 +80,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result[2].Should().Be("c");
     }
 
-    [Fact]
+    [Test]
     public void SplitTrimmedNonEmpty_EmptySegments_SkipsEmptySegments()
     {
         ReadOnlySpan<char> span = "a,,b,  ,c";
@@ -92,7 +91,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result[2].Should().Be("c");
     }
 
-    [Fact]
+    [Test]
     public void SplitTrimmedNonEmpty_OnlyWhitespace_ReturnsEmptyArray()
     {
         ReadOnlySpan<char> span = "   ,   ,   ";
@@ -100,7 +99,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().BeEmpty();
     }
 
-    [Fact]
+    [Test]
     public void SplitTrimmedNonEmpty_ManySegments_HandlesArrayPoolResize()
     {
         ReadOnlySpan<char> span = "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t";
@@ -112,7 +111,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region ToSha256Hex Tests
 
-    [Fact]
+    [Test]
     public void ToSha256Hex_EmptyString_ReturnsExpectedHash()
     {
         ReadOnlySpan<char> span = "";
@@ -121,7 +120,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().Be("E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855");
     }
 
-    [Fact]
+    [Test]
     public void ToSha256Hex_SimpleString_ReturnsExpectedHash()
     {
         ReadOnlySpan<char> span = "hello";
@@ -130,7 +129,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().Be("2CF24DBA5FB0A30E26E83B2AC5B9E29E1B161E5C1FA7425E73043362938B9824");
     }
 
-    [Fact]
+    [Test]
     public void ToSha256Hex_UpperCase_ReturnsUppercaseHex()
     {
         ReadOnlySpan<char> span = "test";
@@ -138,7 +137,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().Be(result.ToUpperInvariant());
     }
 
-    [Fact]
+    [Test]
     public void ToSha256Hex_LowerCase_ReturnsLowercaseHex()
     {
         ReadOnlySpan<char> span = "test";
@@ -146,7 +145,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().Be(result.ToLowerInvariant());
     }
 
-    [Fact]
+    [Test]
     public void ToSha256Hex_LargeString_ReturnsValidHash()
     {
         string largeString = new('x', 2000);
@@ -155,7 +154,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().HaveLength(64);
     }
 
-    [Fact]
+    [Test]
     public void ToSha256Hex_VeryLargeString_ReturnsValidHash()
     {
         string veryLargeString = new('x', 200000);
@@ -168,28 +167,28 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region TrimToNull Tests
 
-    [Fact]
+    [Test]
     public void TrimToNull_EmptySpan_ReturnsNull()
     {
         ReadOnlySpan<char> span = "";
         span.TrimToNull().Should().BeNull();
     }
 
-    [Fact]
+    [Test]
     public void TrimToNull_OnlyWhitespace_ReturnsNull()
     {
         ReadOnlySpan<char> span = "   \t\r\n  ";
         span.TrimToNull().Should().BeNull();
     }
 
-    [Fact]
+    [Test]
     public void TrimToNull_ValueWithWhitespace_ReturnsTrimmedValue()
     {
         ReadOnlySpan<char> span = "  hello  ";
         span.TrimToNull().Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void TrimToNull_ValueWithoutWhitespace_ReturnsValue()
     {
         ReadOnlySpan<char> span = "hello";
@@ -200,7 +199,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region JoinCommaSeparated Tests
 
-    [Fact]
+    [Test]
     public void JoinCommaSeparated_EmptyRanges_ReturnsEmptyString()
     {
         ReadOnlySpan<char> span = "hello,world";
@@ -209,7 +208,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().BeEmpty();
     }
 
-    [Fact]
+    [Test]
     public void JoinCommaSeparated_SingleRange_ReturnsValue()
     {
         ReadOnlySpan<char> span = "hello world test";
@@ -219,7 +218,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void JoinCommaSeparated_MultipleRanges_ReturnsCommaSeparatedValues()
     {
         ReadOnlySpan<char> span = "hello world test";
@@ -231,7 +230,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().Be("hello, world, test");
     }
 
-    [Fact]
+    [Test]
     public void JoinCommaSeparated_RangesWithWhitespace_ReturnsTrimmedValues()
     {
         ReadOnlySpan<char> span = "  hello  ,  world  ";
@@ -242,7 +241,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().Be("hello, world");
     }
 
-    [Fact]
+    [Test]
     public void JoinCommaSeparated_InvalidStartIndex_ReturnsEmptyString()
     {
         ReadOnlySpan<char> span = "hello";
@@ -256,7 +255,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region SplitCommaRanges Tests
 
-    [Fact]
+    [Test]
     public void SplitCommaRanges_EmptyInput_ReturnsZero()
     {
         ReadOnlySpan<char> span = "";
@@ -265,7 +264,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         count.Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void SplitCommaRanges_SingleValue_ReturnsSingleRange()
     {
         ReadOnlySpan<char> span = "hello";
@@ -275,7 +274,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         span[ranges[0]].ToString().Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void SplitCommaRanges_MultipleValues_ReturnsAllRanges()
     {
         ReadOnlySpan<char> span = "a,b,c";
@@ -287,7 +286,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         span[ranges[2]].ToString().Should().Be("c");
     }
 
-    [Fact]
+    [Test]
     public void SplitCommaRanges_EmptySegments_SkipsEmpty()
     {
         ReadOnlySpan<char> span = "a,,b";
@@ -298,7 +297,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         span[ranges[1]].ToString().Should().Be("b");
     }
 
-    [Fact]
+    [Test]
     public void SplitCommaRanges_LimitedRanges_ReturnsUpToLimit()
     {
         ReadOnlySpan<char> span = "a,b,c,d,e";
@@ -311,7 +310,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region SplitNonEmptyLineRanges Tests
 
-    [Fact]
+    [Test]
     public void SplitNonEmptyLineRanges_EmptyInput_ReturnsZero()
     {
         ReadOnlySpan<char> span = "";
@@ -320,7 +319,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         count.Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void SplitNonEmptyLineRanges_SingleLine_ReturnsSingleRange()
     {
         ReadOnlySpan<char> span = "hello";
@@ -330,7 +329,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         span[ranges[0]].ToString().Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void SplitNonEmptyLineRanges_MultipleLines_ReturnsAllRanges()
     {
         ReadOnlySpan<char> span = "a\nb\nc";
@@ -342,7 +341,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         span[ranges[2]].ToString().Should().Be("c");
     }
 
-    [Fact]
+    [Test]
     public void SplitNonEmptyLineRanges_WindowsLineEndings_HandlesCorrectly()
     {
         ReadOnlySpan<char> span = "a\r\nb\r\nc";
@@ -354,7 +353,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         span[ranges[2]].ToString().Should().Be("c");
     }
 
-    [Fact]
+    [Test]
     public void SplitNonEmptyLineRanges_EmptyLines_SkipsEmpty()
     {
         ReadOnlySpan<char> span = "a\n\nb\n  \nc";
@@ -363,7 +362,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         count.Should().Be(3);
     }
 
-    [Fact]
+    [Test]
     public void SplitNonEmptyLineRanges_LinesWithWhitespace_ReturnsTrimmedRanges()
     {
         ReadOnlySpan<char> span = "  a  \n  b  ";
@@ -378,35 +377,35 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region IndexOfNewline Tests
 
-    [Fact]
+    [Test]
     public void IndexOfNewline_NoNewline_ReturnsNegativeOne()
     {
         ReadOnlySpan<char> span = "hello world";
         span.IndexOfNewline(0).Should().Be(-1);
     }
 
-    [Fact]
+    [Test]
     public void IndexOfNewline_LineFeed_ReturnsIndex()
     {
         ReadOnlySpan<char> span = "hello\nworld";
         span.IndexOfNewline(0).Should().Be(5);
     }
 
-    [Fact]
+    [Test]
     public void IndexOfNewline_CarriageReturn_ReturnsIndex()
     {
         ReadOnlySpan<char> span = "hello\rworld";
         span.IndexOfNewline(0).Should().Be(5);
     }
 
-    [Fact]
+    [Test]
     public void IndexOfNewline_StartAfterNewline_ReturnsNegativeOne()
     {
         ReadOnlySpan<char> span = "hello\nworld";
         span.IndexOfNewline(6).Should().Be(-1);
     }
 
-    [Fact]
+    [Test]
     public void IndexOfNewline_StartOutOfRange_ReturnsNegativeOne()
     {
         ReadOnlySpan<char> span = "hello";
@@ -417,42 +416,42 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region TrimCrlf Tests
 
-    [Fact]
+    [Test]
     public void TrimCrlf_NoNewlines_ReturnsOriginal()
     {
         ReadOnlySpan<char> span = "hello";
         span.TrimCrlf().ToString().Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void TrimCrlf_LeadingNewlines_TrimsLeading()
     {
         ReadOnlySpan<char> span = "\r\nhello";
         span.TrimCrlf().ToString().Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void TrimCrlf_TrailingNewlines_TrimsTrailing()
     {
         ReadOnlySpan<char> span = "hello\r\n";
         span.TrimCrlf().ToString().Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void TrimCrlf_BothEnds_TrimsBoth()
     {
         ReadOnlySpan<char> span = "\r\nhello\r\n";
         span.TrimCrlf().ToString().Should().Be("hello");
     }
 
-    [Fact]
+    [Test]
     public void TrimCrlf_OnlyNewlines_ReturnsEmpty()
     {
         ReadOnlySpan<char> span = "\r\n\r\n";
         span.TrimCrlf().ToString().Should().BeEmpty();
     }
 
-    [Fact]
+    [Test]
     public void TrimCrlf_PreservesInternalNewlines()
     {
         ReadOnlySpan<char> span = "\nhello\nworld\n";
@@ -463,28 +462,28 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region CountChar Tests
 
-    [Fact]
+    [Test]
     public void CountChar_EmptySpan_ReturnsZero()
     {
         ReadOnlySpan<char> span = "";
         span.CountChar('a').Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void CountChar_NoMatches_ReturnsZero()
     {
         ReadOnlySpan<char> span = "hello";
         span.CountChar('z').Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void CountChar_SingleMatch_ReturnsOne()
     {
         ReadOnlySpan<char> span = "hello";
         span.CountChar('h').Should().Be(1);
     }
 
-    [Fact]
+    [Test]
     public void CountChar_MultipleMatches_ReturnsCount()
     {
         ReadOnlySpan<char> span = "hello";
@@ -495,35 +494,35 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region LeadingWhitespaceCount Tests
 
-    [Fact]
+    [Test]
     public void LeadingWhitespaceCount_EmptySpan_ReturnsZero()
     {
         ReadOnlySpan<char> span = "";
         span.LeadingWhitespaceCount().Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void LeadingWhitespaceCount_NoLeadingWhitespace_ReturnsZero()
     {
         ReadOnlySpan<char> span = "hello";
         span.LeadingWhitespaceCount().Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void LeadingWhitespaceCount_HasLeadingWhitespace_ReturnsCount()
     {
         ReadOnlySpan<char> span = "   hello";
         span.LeadingWhitespaceCount().Should().Be(3);
     }
 
-    [Fact]
+    [Test]
     public void LeadingWhitespaceCount_AllWhitespace_ReturnsLength()
     {
         ReadOnlySpan<char> span = "   ";
         span.LeadingWhitespaceCount().Should().Be(3);
     }
 
-    [Fact]
+    [Test]
     public void LeadingWhitespaceCount_MixedWhitespace_ReturnsCorrectCount()
     {
         ReadOnlySpan<char> span = " \t\r\nhello";
@@ -534,28 +533,28 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region TrailingWhitespaceCount Tests
 
-    [Fact]
+    [Test]
     public void TrailingWhitespaceCount_EmptySpan_ReturnsZero()
     {
         ReadOnlySpan<char> span = "";
         span.TrailingWhitespaceCount().Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void TrailingWhitespaceCount_NoTrailingWhitespace_ReturnsZero()
     {
         ReadOnlySpan<char> span = "hello";
         span.TrailingWhitespaceCount().Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void TrailingWhitespaceCount_HasTrailingWhitespace_ReturnsCount()
     {
         ReadOnlySpan<char> span = "hello   ";
         span.TrailingWhitespaceCount().Should().Be(3);
     }
 
-    [Fact]
+    [Test]
     public void TrailingWhitespaceCount_AllWhitespace_ReturnsLength()
     {
         ReadOnlySpan<char> span = "   ";
@@ -566,7 +565,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region TryParseHexUInt64 Tests
 
-    [Fact]
+    [Test]
     public void TryParseHexUInt64_ValidUppercase_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "0123456789ABCDEF";
@@ -575,7 +574,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         value.Should().Be(0x0123456789ABCDEFuL);
     }
 
-    [Fact]
+    [Test]
     public void TryParseHexUInt64_ValidLowercase_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "0123456789abcdef";
@@ -584,7 +583,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         value.Should().Be(0x0123456789ABCDEFuL);
     }
 
-    [Fact]
+    [Test]
     public void TryParseHexUInt64_TooShort_ReturnsFalse()
     {
         ReadOnlySpan<char> span = "0123456789ABCDE";
@@ -593,7 +592,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         value.Should().Be(0uL);
     }
 
-    [Fact]
+    [Test]
     public void TryParseHexUInt64_TooLong_ReturnsFalse()
     {
         ReadOnlySpan<char> span = "0123456789ABCDEF0";
@@ -601,7 +600,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void TryParseHexUInt64_InvalidCharacter_ReturnsFalse()
     {
         ReadOnlySpan<char> span = "0123456789GHIJKL";
@@ -609,7 +608,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         result.Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void TryParseHexUInt64_AllZeros_ReturnsZero()
     {
         ReadOnlySpan<char> span = "0000000000000000";
@@ -618,7 +617,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         value.Should().Be(0uL);
     }
 
-    [Fact]
+    [Test]
     public void TryParseHexUInt64_MaxValue_ReturnsMaxValue()
     {
         ReadOnlySpan<char> span = "FFFFFFFFFFFFFFFF";
@@ -631,7 +630,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region SkipWhitespace Tests
 
-    [Fact]
+    [Test]
     public void SkipWhitespace_EmptySpan_IndexUnchanged()
     {
         ReadOnlySpan<char> span = "";
@@ -640,7 +639,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         idx.Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void SkipWhitespace_NoWhitespace_IndexUnchanged()
     {
         ReadOnlySpan<char> span = "hello";
@@ -649,7 +648,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         idx.Should().Be(0);
     }
 
-    [Fact]
+    [Test]
     public void SkipWhitespace_HasWhitespace_SkipsToNonWhitespace()
     {
         ReadOnlySpan<char> span = "   hello";
@@ -658,7 +657,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         idx.Should().Be(3);
     }
 
-    [Fact]
+    [Test]
     public void SkipWhitespace_AllWhitespace_SkipsToEnd()
     {
         ReadOnlySpan<char> span = "   ";
@@ -667,7 +666,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         idx.Should().Be(3);
     }
 
-    [Fact]
+    [Test]
     public void SkipWhitespace_StartInMiddle_SkipsFromStartIndex()
     {
         ReadOnlySpan<char> span = "hello   world";
@@ -680,7 +679,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region AddTokens Tests
 
-    [Fact]
+    [Test]
     public void AddTokens_EmptySpan_AddsNothing()
     {
         ReadOnlySpan<char> span = "";
@@ -689,7 +688,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         set.Should().BeEmpty();
     }
 
-    [Fact]
+    [Test]
     public void AddTokens_SingleToken_AddsOne()
     {
         ReadOnlySpan<char> span = "hello";
@@ -699,7 +698,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         set.Should().Contain("hello");
     }
 
-    [Fact]
+    [Test]
     public void AddTokens_MultipleTokens_AddsAll()
     {
         ReadOnlySpan<char> span = "hello world test";
@@ -711,7 +710,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         set.Should().Contain("test");
     }
 
-    [Fact]
+    [Test]
     public void AddTokens_DuplicateTokens_AddsOnlyUnique()
     {
         ReadOnlySpan<char> span = "hello hello world";
@@ -720,7 +719,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         set.Should().HaveCount(2);
     }
 
-    [Fact]
+    [Test]
     public void AddTokens_LeadingTrailingWhitespace_IgnoresWhitespace()
     {
         ReadOnlySpan<char> span = "   hello   world   ";
@@ -731,7 +730,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         set.Should().Contain("world");
     }
 
-    [Fact]
+    [Test]
     public void AddTokens_ExistingSet_MergesTokens()
     {
         ReadOnlySpan<char> span = "world";
@@ -746,7 +745,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region EqualsAsciiIgnoreCase Tests
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_EmptySpans_ReturnsTrue()
     {
         ReadOnlySpan<char> a = "";
@@ -754,7 +753,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase(b).Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_SameCase_ReturnsTrue()
     {
         ReadOnlySpan<char> a = "hello";
@@ -762,7 +761,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase(b).Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_DifferentCase_ReturnsTrue()
     {
         ReadOnlySpan<char> a = "hello";
@@ -770,7 +769,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase(b).Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_MixedCase_ReturnsTrue()
     {
         ReadOnlySpan<char> a = "HeLLo";
@@ -778,7 +777,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase(b).Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_DifferentContent_ReturnsFalse()
     {
         ReadOnlySpan<char> a = "hello";
@@ -786,7 +785,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase(b).Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_DifferentLength_ReturnsFalse()
     {
         ReadOnlySpan<char> a = "hello";
@@ -794,7 +793,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase(b).Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_NonAscii_ReturnsFalse()
     {
         ReadOnlySpan<char> a = "héllo";
@@ -806,7 +805,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region EqualsAsciiIgnoreCase_AssumeAscii Tests
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_AssumeAscii_EmptySpans_ReturnsTrue()
     {
         ReadOnlySpan<char> a = "";
@@ -814,7 +813,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase_AssumeAscii(b).Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_AssumeAscii_SameCase_ReturnsTrue()
     {
         ReadOnlySpan<char> a = "hello";
@@ -822,7 +821,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase_AssumeAscii(b).Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_AssumeAscii_DifferentCase_ReturnsTrue()
     {
         ReadOnlySpan<char> a = "hello";
@@ -830,7 +829,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase_AssumeAscii(b).Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_AssumeAscii_DifferentContent_ReturnsFalse()
     {
         ReadOnlySpan<char> a = "hello";
@@ -838,7 +837,7 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
         a.EqualsAsciiIgnoreCase_AssumeAscii(b).Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void EqualsAsciiIgnoreCase_AssumeAscii_DifferentLength_ReturnsFalse()
     {
         ReadOnlySpan<char> a = "hello";
@@ -850,42 +849,42 @@ public sealed class ReadOnlySpanCharExtensionTests : UnitTest
 
     #region IsAscii Tests
 
-    [Fact]
+    [Test]
     public void IsAscii_EmptySpan_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "";
         span.IsAscii().Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void IsAscii_AllAscii_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "Hello, World! 123";
         span.IsAscii().Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void IsAscii_ContainsNonAscii_ReturnsFalse()
     {
         ReadOnlySpan<char> span = "Hëllo";
         span.IsAscii().Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void IsAscii_AllControlCharacters_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "\t\r\n";
         span.IsAscii().Should().BeTrue();
     }
 
-    [Fact]
+    [Test]
     public void IsAscii_HighAscii_ReturnsFalse()
     {
         ReadOnlySpan<char> span = "Hello\u0080";
         span.IsAscii().Should().BeFalse();
     }
 
-    [Fact]
+    [Test]
     public void IsAscii_Boundary_ReturnsTrue()
     {
         ReadOnlySpan<char> span = "\u007F";
