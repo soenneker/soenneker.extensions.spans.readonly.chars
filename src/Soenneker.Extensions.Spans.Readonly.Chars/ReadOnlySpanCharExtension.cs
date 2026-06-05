@@ -12,6 +12,9 @@ using System.Text;
 
 namespace Soenneker.Extensions.Spans.Readonly.Chars;
 
+/// <summary>
+/// Represents the read only span char extension.
+/// </summary>
 public static class ReadOnlySpanCharExtension
 {
     /// <summary>
