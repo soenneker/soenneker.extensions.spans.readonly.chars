@@ -42,6 +42,41 @@ public static class ReadOnlySpanCharExtension
         return true;
     }
 
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool StartsWithHttpScheme(this ReadOnlySpan<char> span)
+    {
+        // Minimum: http://
+        if (span.Length < 7)
+            return false;
+
+        if (!EqualsAsciiIgnoreCase(span[0], 'h') ||
+            !EqualsAsciiIgnoreCase(span[1], 't') ||
+            !EqualsAsciiIgnoreCase(span[2], 't') ||
+            !EqualsAsciiIgnoreCase(span[3], 'p'))
+        {
+            return false;
+        }
+
+        if (span[4] == ':')
+        {
+            return span[5] == '/' && span[6] == '/';
+        }
+
+        // Minimum: https://
+        return span.Length >= 8 &&
+               EqualsAsciiIgnoreCase(span[4], 's') &&
+               span[5] == ':' &&
+               span[6] == '/' &&
+               span[7] == '/';
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static bool EqualsAsciiIgnoreCase(char value, char lower)
+        {
+            return value == lower || value == lower - 32;
+        }
+    }
+
     /// <summary>
     /// Splits the specified character span into substrings based on the given separator, trims whitespace from each
     /// substring, and returns only the non-empty results.
