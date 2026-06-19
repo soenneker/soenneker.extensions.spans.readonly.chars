@@ -46,6 +46,6 @@
     <ItemGroup>
         <PackageReference Include="Soenneker.Extensions.Char" Version="4.0.99" />
         <PackageReference Include="Soenneker.Extensions.Spans.Readonly.Bytes" Version="4.0.45" />
-        <PackageReference Include="Soenneker.Utils.PooledStringBuilders" Version="4.0.22" />
+        <PackageReference Include="Soenneker.Utils.PooledStringBuilders" Version="4.0.25" />
     </ItemGroup>
 </Project>
