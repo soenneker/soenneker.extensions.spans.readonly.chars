@@ -42,6 +42,11 @@ public static class ReadOnlySpanCharExtension
         return true;
     }
 
+    /// <summary>
+    /// Determines whether a character span begins with <c>http://</c> or <c>https://</c>, ignoring case.
+    /// </summary>
+    /// <param name="span">The characters to inspect.</param>
+    /// <returns>True when the span starts with an HTTP or HTTPS scheme.</returns>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool StartsWithHttpScheme(this ReadOnlySpan<char> span)
@@ -641,6 +646,7 @@ public static class ReadOnlySpanCharExtension
     /// Attempts to parse a 16-character hexadecimal string into a 64-bit unsigned integer.
     /// Accepts upper- and lowercase hexadecimal characters.
     /// </summary>
+    /// <returns>Attempts to parse a 16-character hexadecimal string into a 64-bit unsigned integer. Accepts upper- and lowercase hexadecimal characters.</returns>
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool TryParseHexUInt64(this ReadOnlySpan<char> hex, out ulong value)
     {
