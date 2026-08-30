@@ -4,7 +4,7 @@
 [![](https://img.shields.io/github/actions/workflow/status/soenneker/soenneker.extensions.spans.readonly.chars/codeql.yml?label=CodeQL&style=for-the-badge)](https://github.com/soenneker/soenneker.extensions.spans.readonly.chars/actions/workflows/codeql.yml)
 
 # ![](https://user-images.githubusercontent.com/4441470/224455560-91ed3ee7-f510-4041-a8d2-3fc093025112.png) Soenneker.Extensions.Spans.Readonly.Chars
-A collection of helpful ReadOnlySpan (char) extension methods.
+Allocation-conscious parsing, splitting, hashing, and ASCII helpers for `ReadOnlySpan<char>`.
 
 ## Installation
 
@@ -12,28 +12,59 @@ A collection of helpful ReadOnlySpan (char) extension methods.
 dotnet add package Soenneker.Extensions.Spans.Readonly.Chars
 ```
 
-## Quick start
+## Split and normalize text
 
 ```csharp
 using Soenneker.Extensions.Spans.Readonly.Chars;
 
-// Given an existing ReadOnlySpan<char> named span:
-var result = span.IsWhiteSpace();
+ReadOnlySpan<char> value = " alpha, , beta ,gamma ";
+string[] parts = value.SplitTrimmedNonEmpty(',');
+// ["alpha", "beta", "gamma"]
 ```
 
-## Common operations
+`SplitTrimmedNonEmpty()` creates one string per retained segment. For parsing without substring allocations, write source-backed ranges into a caller-owned buffer:
 
-- `IsWhiteSpace()` - Determines whether all characters in the specified read-only character span are white-space characters.
-- `StartsWithHttpScheme()` - Returns `true` when the span begins with `http://` or `https://`, using an allocation-free ASCII case-insensitive check.
-- `SplitTrimmedNonEmpty()` - Splits the specified character span into substrings based on the given separator, trims whitespace from each substring, and returns only the non-empty results.
-- `ToSha256Hex()` - Computes the SHA-256 hash of the specified text and returns its hexadecimal string representation.
-- `ToSha256HexStreaming()` - Computes the SHA-256 hash of the specified text using streaming encoding and returns the result as a hexadecimal string.
-- `JoinCommaSeparated()` - Creates a comma-separated string by joining the trimmed substrings of the specified ranges within the input span. Returns a string consisting of the trimmed substrings, separated by commas and spaces. Returns an empty string if no non-empty substrings are found.
-- `TrimToNull()` - Trims leading and trailing white-space characters from the specified span and returns the resulting string, or null if the trimmed span is empty.
-- `SplitCommaRanges()` - Splits a read-only character span into ranges separated by commas and writes the resulting ranges to the specified destination span.
-- `SplitNonEmptyLineRanges()` - Splits the input span into ranges representing non-empty, trimmed lines and writes them to the specified destination span. Returns the number of non-empty, trimmed line ranges written to the destination span. This value will not exceed the length of the destination span.
-- `IndexOfNewline()` - Searches for the first occurrence of a newline character ('\r' or '\n') in the specified span, starting at the given index. Returns the zero-based index of the first occurrence of a newline character in the span, or -1 if no newline character is found.
-- `TrimCrlf()` - Removes any leading and trailing carriage return ('\r') and line feed ('\n') characters from the specified read-only character span. This method does not modify the original data; it returns a new span referencing the trimmed range within the original span.
-- `CountChar()` - Counts the number of occurrences of a specified character within a read-only span of characters. Returns the total number of times the specified character appears in the span. This method is optimized for performance and does not allocate additional memory.
+```csharp
+ReadOnlySpan<char> csv = "alpha,, beta,gamma";
+Span<Range> ranges = stackalloc Range[8];
 
-The package also includes 8 additional operations for more specialized cases.
+int count = csv.SplitCommaRanges(ranges);
+for (int i = 0; i < count; i++)
+{
+    ReadOnlySpan<char> item = csv[ranges[i]];
+}
+```
+
+`SplitCommaRanges()` skips empty segments but does not trim them. `SplitNonEmptyLineRanges()` does trim each line and supports `\r`, `\n`, and `\r\n`. Both stop when the destination is full; the return value is the number written, not the total number available.
+
+## Hash text
+
+```csharp
+string hash = "payload".AsSpan().ToSha256Hex(
+    encoding: Encoding.UTF8,
+    upperCase: false);
+```
+
+The result is always 64 hexadecimal characters. UTF-8 is used when no encoding is supplied. Small inputs are encoded on the stack, medium inputs use a cleared pooled buffer, and large inputs are encoded incrementally. Temporary byte buffers are zeroed before release, but the source text and returned hash remain the caller's responsibility.
+
+## HTTP and ASCII checks
+
+```csharp
+bool hasScheme = "HTTPS://example.com".AsSpan().StartsWithHttpScheme();
+bool equal = "Content-Type".AsSpan().EqualsAsciiIgnoreCase("content-type");
+bool ascii = "plain text".AsSpan().IsAscii();
+```
+
+`StartsWithHttpScheme()` checks only the prefix; it does not validate a URI. `EqualsAsciiIgnoreCase()` folds ASCII letters and requires non-ASCII characters to match exactly. Use `EqualsAsciiIgnoreCase_AssumeAscii()` only after validating both inputs with `IsAscii()`.
+
+## Other helpers
+
+- `IsWhiteSpace()` returns `true` for an empty span.
+- `TrimToNull()` is the allocating counterpart to `Trim()`: it returns `null` for an empty trimmed value.
+- `JoinCommaSeparated()` trims selected ranges, skips empty values, and joins the rest with `, `.
+- `IndexOfNewline()` and `TrimCrlf()` operate specifically on CR/LF characters.
+- `LeadingWhitespaceCount()`, `TrailingWhitespaceCount()`, and `SkipWhitespace()` support index-based parsers.
+- `TryParseHexUInt64()` accepts exactly 16 hexadecimal characters.
+- `AddTokens()` allocates strings for whitespace-delimited tokens and honors the supplied set's comparer.
+
+Ranges and spans returned by these helpers reference the original storage and must not outlive it.

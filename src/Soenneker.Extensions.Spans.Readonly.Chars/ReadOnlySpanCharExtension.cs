@@ -222,8 +222,15 @@ public static class ReadOnlySpanCharExtension
         if (byteCount <= 1024)
         {
             Span<byte> tmp = byteCount == 0 ? [] : stackalloc byte[byteCount];
-            encoding.GetBytes(text, tmp);
-            return tmp.ToSha256Hex(upperCase);
+            try
+            {
+                encoding.GetBytes(text, tmp);
+                return tmp.ToSha256Hex(upperCase);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(tmp);
+            }
         }
 
         // Pool fallback
@@ -237,6 +244,7 @@ public static class ReadOnlySpanCharExtension
             }
             finally
             {
+                CryptographicOperations.ZeroMemory(rented.AsSpan(0, byteCount));
                 ArrayPool<byte>.Shared.Return(rented, clearArray: false);
             }
         }
@@ -310,6 +318,7 @@ public static class ReadOnlySpanCharExtension
         }
         finally
         {
+            CryptographicOperations.ZeroMemory(buffer);
             ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
         }
     }
