@@ -253,72 +253,28 @@ public static class ReadOnlySpanCharExtension
     }
 
     /// <summary>
-    /// Computes the SHA-256 hash of the specified text using streaming encoding and returns the result as a hexadecimal
-    /// string.
+    /// Computes the SHA-256 hash of the specified text using a pooled encoding buffer and returns the result as a hexadecimal string.
     /// </summary>
-    /// <remarks>This method processes the input text in chunks, minimizing memory usage for large inputs. The
-    /// hash is computed incrementally using the specified encoding, which may affect the output if the encoding is not
-    /// deterministic. The caller is responsible for ensuring that the encoding is appropriate for the input
-    /// text.</remarks>
+    /// <remarks>The encoded bytes are rented from a shared pool and cleared before being returned.</remarks>
     /// <param name="text">The input text to hash.</param>
     /// <param name="encoding">The character encoding to use when converting the text to bytes for hashing. Must not be null.</param>
     /// <param name="upperCase">Specifies whether the returned hexadecimal string should use uppercase letters. If <see langword="true"/>, the
     /// result is uppercase; otherwise, lowercase.</param>
     /// <returns>A hexadecimal string representation of the SHA-256 hash of the input text.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the encoder fails to make progress when converting the input text to bytes.</exception>
     [Pure, MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static string ToSha256HexStreaming(this ReadOnlySpan<char> text, Encoding encoding, bool upperCase)
     {
-        using var ih = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-
-        Encoder encoder = encoding.GetEncoder();
-
-        const int charChunk = 4096;
-
-        // Correct sizing: max bytes for *charChunk* chars (includes encoder overhead properly)
-        int maxBytes = encoding.GetMaxByteCount(charChunk);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(maxBytes);
+        int byteCount = encoding.GetByteCount(text);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
 
         try
         {
-            for (var i = 0; i < text.Length; i += charChunk)
-            {
-                ReadOnlySpan<char> slice = text.Slice(i, Math.Min(charChunk, text.Length - i));
-                bool flush = i + slice.Length >= text.Length;
-
-                encoder.Convert(slice, buffer, flush, out int charsUsed, out int bytesUsed, out bool completed);
-
-                // With GetMaxByteCount(charChunk), we should always complete in one shot.
-                // If it ever doesn't (exotic encoding edge), fall back to a small loop.
-                if (!completed)
-                {
-                    while (true)
-                    {
-                        ih.AppendData(buffer, 0, bytesUsed);
-
-                        slice = slice.Slice(charsUsed);
-                        if (slice.IsEmpty)
-                            break;
-
-                        encoder.Convert(slice, buffer, flush, out charsUsed, out bytesUsed, out completed);
-                        if (bytesUsed == 0 && charsUsed == 0)
-                            throw new InvalidOperationException("Encoder made no progress.");
-                    }
-                }
-                else
-                {
-                    ih.AppendData(buffer, 0, bytesUsed);
-                }
-            }
-
-            Span<byte> hash = stackalloc byte[32];
-            ih.TryGetHashAndReset(hash, out _);
-
-            return upperCase ? Convert.ToHexString(hash) : Convert.ToHexStringLower(hash);
+            int written = encoding.GetBytes(text, buffer);
+            return new ReadOnlySpan<byte>(buffer, 0, written).ToSha256Hex(upperCase);
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(buffer);
+            CryptographicOperations.ZeroMemory(buffer.AsSpan(0, byteCount));
             ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
         }
     }
