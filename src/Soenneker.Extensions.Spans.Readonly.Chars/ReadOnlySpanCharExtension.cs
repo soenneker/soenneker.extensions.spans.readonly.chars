@@ -264,17 +264,27 @@ public static class ReadOnlySpanCharExtension
     [Pure, MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static string ToSha256HexStreaming(this ReadOnlySpan<char> text, Encoding encoding, bool upperCase)
     {
-        int byteCount = encoding.GetByteCount(text);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
-
+        const int bufferSize = 16 * 1024;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(Math.Max(bufferSize, encoding.GetMaxByteCount(2)));
         try
         {
-            int written = encoding.GetBytes(text, buffer);
-            return new ReadOnlySpan<byte>(buffer, 0, written).ToSha256Hex(upperCase);
+            using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            Encoder encoder = encoding.GetEncoder();
+            bool completed;
+            do
+            {
+                encoder.Convert(text, buffer, flush: true, out int charsUsed, out int bytesUsed, out completed);
+                hash.AppendData(buffer.AsSpan(0, bytesUsed));
+                text = text[charsUsed..];
+            } while (!completed);
+
+            Span<byte> digest = stackalloc byte[32];
+            hash.GetHashAndReset(digest);
+            return upperCase ? Convert.ToHexString(digest) : Convert.ToHexStringLower(digest);
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(buffer.AsSpan(0, byteCount));
+            CryptographicOperations.ZeroMemory(buffer);
             ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
         }
     }
@@ -687,6 +697,8 @@ public static class ReadOnlySpanCharExtension
     public static void AddTokens(this ReadOnlySpan<char> value, HashSet<string> set)
     {
         var k = 0;
+        HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup = default;
+        bool useAlternateLookup = set is not null && set.TryGetAlternateLookup(out lookup);
 
         while (k < value.Length)
         {
@@ -703,8 +715,12 @@ public static class ReadOnlySpanCharExtension
                        .IsWhiteSpaceFast())
                 k++;
 
-            set.Add(value.Slice(start, k - start)
-                         .ToString());
+            ReadOnlySpan<char> token = value.Slice(start, k - start);
+
+            if (useAlternateLookup)
+                lookup.Add(token);
+            else
+                set!.Add(token.ToString());
         }
     }
 
@@ -800,14 +816,6 @@ public static class ReadOnlySpanCharExtension
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsAscii(this ReadOnlySpan<char> span)
     {
-        ref char r0 = ref MemoryMarshal.GetReference(span);
-
-        for (var i = 0; i < span.Length; i++)
-        {
-            if (Unsafe.Add(ref r0, i) > 0x7Fu)
-                return false;
-        }
-
-        return true;
+        return Ascii.IsValid(span);
     }
 }
