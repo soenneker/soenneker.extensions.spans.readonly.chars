@@ -1,6 +1,5 @@
 ﻿using Soenneker.Extensions.Char;
 using Soenneker.Extensions.Spans.Readonly.Bytes;
-using Soenneker.Utils.PooledStringBuilders;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -96,107 +95,59 @@ public static class ReadOnlySpanCharExtension
     [Pure]
     public static string[] SplitTrimmedNonEmpty(this ReadOnlySpan<char> span, char separator)
     {
-        int len = span.Length;
-        if (len == 0)
+        if (span.IsEmpty)
             return [];
 
-        if (span.IndexOf(separator) < 0)
+        int end = span.IndexOf(separator);
+        if (end < 0)
         {
-            if (!TryTrimNonEmpty(span, out ReadOnlySpan<char> trimmed))
-                return [];
-
-            return [trimmed.ToString()];
+            ReadOnlySpan<char> trimmed = span.Trim();
+            return trimmed.IsEmpty ? [] : [trimmed.ToString()];
         }
-
-        const int initialSegs = 16;
-        const int stackInts = initialSegs * 2;
 
         int[]? rented = null;
-        Span<int> pairs = stackalloc int[stackInts];
-        int segCount = 0;
-
-        ref char r0 = ref MemoryMarshal.GetReference(span);
-        int start = 0;
-
-        for (int i = 0; i <= len; i++)
+        Span<int> pairs = stackalloc int[32];
+        int count = 0;
+        try
         {
-            if (i == len || Unsafe.Add(ref r0, i) == separator)
+            int start = 0;
+            while (true)
             {
-                int segLen = i - start;
-                if (segLen > 0)
+                TrimBounds(span, start, end, out int trimmedStart, out int length);
+                if (length != 0)
                 {
-                    TrimBoundsFast(span, start, i, out int tStart, out int tLen);
-                    if (tLen != 0)
+                    if (count == pairs.Length)
                     {
-                        if ((segCount * 2) == pairs.Length)
-                        {
-                            int newSize = pairs.Length * 2;
-                            int[] newArr = ArrayPool<int>.Shared.Rent(newSize);
-                            pairs[..(segCount * 2)].CopyTo(newArr);
-
-                            if (rented is not null)
-                                ArrayPool<int>.Shared.Return(rented, clearArray: false);
-
-                            rented = newArr;
-                            pairs = newArr;
-                        }
-
-                        int p = segCount * 2;
-                        pairs[p] = tStart;
-                        pairs[p + 1] = tLen;
-                        segCount++;
+                        int[] expanded = ArrayPool<int>.Shared.Rent(checked(count * 2));
+                        pairs.CopyTo(expanded);
+                        if (rented is not null)
+                            ArrayPool<int>.Shared.Return(rented);
+                        rented = expanded;
+                        pairs = expanded;
                     }
+                    pairs[count++] = trimmedStart;
+                    pairs[count++] = length;
                 }
 
-                start = i + 1;
+                if (end == span.Length)
+                    break;
+                start = end + 1;
+                int next = span[start..].IndexOf(separator);
+                end = next < 0 ? span.Length : start + next;
             }
-        }
 
-        if (segCount == 0)
+            if (count == 0)
+                return [];
+
+            var result = new string[count / 2];
+            for (int i = 0; i < result.Length; i++)
+                result[i] = span.Slice(pairs[i * 2], pairs[i * 2 + 1]).ToString();
+            return result;
+        }
+        finally
         {
             if (rented is not null)
-                ArrayPool<int>.Shared.Return(rented, clearArray: false);
-
-            return [];
-        }
-
-        if (segCount == 1)
-        {
-            string single = span.Slice(pairs[0], pairs[1]).ToString();
-
-            if (rented is not null)
-                ArrayPool<int>.Shared.Return(rented, clearArray: false);
-
-            return [single];
-        }
-
-        string[] result = new string[segCount];
-
-        for (int i = 0; i < segCount; i++)
-        {
-            int p = i * 2;
-            result[i] = span.Slice(pairs[p], pairs[p + 1]).ToString();
-        }
-
-        if (rented is not null)
-            ArrayPool<int>.Shared.Return(rented, clearArray: false);
-
-        return result;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void TrimBoundsFast(ReadOnlySpan<char> s, int start, int end, out int trimmedStart, out int trimmedLen)
-        {
-            int i = start;
-            while (i < end && s[i].IsWhiteSpaceFast())
-                i++;
-
-            int j = end - 1;
-            while (j >= i && s[j].IsWhiteSpaceFast())
-                j--;
-
-            trimmedStart = i;
-            int l = j - i + 1;
-            trimmedLen = l > 0 ? l : 0;
+                ArrayPool<int>.Shared.Return(rented);
         }
     }
 
@@ -289,29 +240,7 @@ public static class ReadOnlySpanCharExtension
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool TryTrimNonEmpty(ReadOnlySpan<char> segment, out ReadOnlySpan<char> trimmed)
-    {
-        var start = 0;
-        int end = segment.Length - 1;
 
-        while ((uint)start < (uint)segment.Length && segment[start]
-                   .IsWhiteSpaceFast())
-            start++;
-
-        while (end >= start && segment[end]
-                   .IsWhiteSpaceFast())
-            end--;
-
-        if (end < start)
-        {
-            trimmed = default;
-            return false;
-        }
-
-        trimmed = segment.Slice(start, end - start + 1);
-        return true;
-    }
 
     /// <summary>
     /// Creates a comma-separated string by joining the trimmed substrings of the specified ranges within the input
@@ -360,7 +289,7 @@ public static class ReadOnlySpanCharExtension
                 int p = segCount * 2;
                 pairs[p] = tStart;
                 pairs[p + 1] = tLen;
-                totalChars += tLen;
+                totalChars = checked(totalChars + tLen);
                 segCount++;
             }
 
@@ -370,26 +299,36 @@ public static class ReadOnlySpanCharExtension
             if (segCount == 1)
                 return address.Slice(pairs[0], pairs[1]).ToString();
 
-            int finalLen = totalChars + (segCount - 1) * 2;
+            int finalLen = checked(totalChars + (segCount - 1) * 2);
 
-            using var sb = new PooledStringBuilder(finalLen);
-
-            for (var i = 0; i < segCount; i++)
+            return string.Create(finalLen, new JoinState(address, pairs[..(segCount * 2)]), static (destination, state) =>
             {
-                if (i != 0)
-                    sb.Append(", ");
+                int written = 0;
+                for (int i = 0; i < state.Pairs.Length; i += 2)
+                {
+                    if (i != 0)
+                    {
+                        destination[written++] = ',';
+                        destination[written++] = ' ';
+                    }
 
-                int p = i * 2;
-                sb.Append(address.Slice(pairs[p], pairs[p + 1]));
-            }
-
-            return sb.ToString();
+                    int length = state.Pairs[i + 1];
+                    state.Address.Slice(state.Pairs[i], length).CopyTo(destination[written..]);
+                    written += length;
+                }
+            });
         }
         finally
         {
             if (rented is not null)
                 ArrayPool<int>.Shared.Return(rented, clearArray: false);
         }
+    }
+
+    private readonly ref struct JoinState(ReadOnlySpan<char> address, ReadOnlySpan<int> pairs)
+    {
+        public readonly ReadOnlySpan<char> Address = address;
+        public readonly ReadOnlySpan<int> Pairs = pairs;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -452,24 +391,18 @@ public static class ReadOnlySpanCharExtension
     /// span.</returns>
     public static int SplitCommaRanges(this ReadOnlySpan<char> input, Span<Range> ranges)
     {
-        var count = 0;
-        var start = 0;
-        var i = 0;
-        int len = input.Length;
-
-        while (i < len && count < ranges.Length)
+        int count = 0;
+        int position = 0;
+        while (position < input.Length && count < ranges.Length)
         {
-            // scan until comma or end
-            while (i < len && input[i] != ',')
-                i++;
-
-            if (i > start) // non-empty segment
-                ranges[count++] = start..i;
-
-            i++; // skip comma (or move past end by 1; fine)
-            start = i;
+            int separator = input[position..].IndexOf(',');
+            int end = separator < 0 ? input.Length : position + separator;
+            if (end != position)
+                ranges[count++] = position..end;
+            if (separator < 0)
+                break;
+            position = end + 1;
         }
-
         return count;
     }
 
@@ -739,6 +672,9 @@ public static class ReadOnlySpanCharExtension
         if (a.Length != b.Length)
             return false;
 
+        if (a.Length >= 32 && Ascii.IsValid(a) && Ascii.IsValid(b))
+            return a.Equals(b, StringComparison.OrdinalIgnoreCase);
+
         ref char ra = ref MemoryMarshal.GetReference(a);
         ref char rb = ref MemoryMarshal.GetReference(b);
 
@@ -780,32 +716,7 @@ public static class ReadOnlySpanCharExtension
     [Pure, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool EqualsAsciiIgnoreCase_AssumeAscii(this ReadOnlySpan<char> a, ReadOnlySpan<char> b)
     {
-        if (a.Length != b.Length)
-            return false;
-
-        ref char ra = ref MemoryMarshal.GetReference(a);
-        ref char rb = ref MemoryMarshal.GetReference(b);
-
-        int len = a.Length;
-
-        for (var i = 0; i < len; i++)
-        {
-            uint ac = Unsafe.Add(ref ra, i);
-            uint bc = Unsafe.Add(ref rb, i);
-
-            if (ac == bc)
-                continue;
-
-            if (ac - 'A' <= 25u)
-                ac += 32u;
-            if (bc - 'A' <= 25u)
-                bc += 32u;
-
-            if (ac != bc)
-                return false;
-        }
-
-        return true;
+        return a.Equals(b, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
