@@ -46,6 +46,6 @@
 
     <ItemGroup>
         <PackageReference Include="Soenneker.Extensions.Char" Version="11.0.115" />
-        <PackageReference Include="Soenneker.Extensions.Spans.Readonly.Bytes" Version="11.0.100" />
+        <PackageReference Include="Soenneker.Extensions.Spans.Readonly.Bytes" Version="11.0.101" />
     </ItemGroup>
 </Project>
