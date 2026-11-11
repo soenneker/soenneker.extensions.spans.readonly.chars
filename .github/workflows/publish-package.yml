@@ -42,7 +42,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 11.0.100-rc.3.26522.148
+          dotnet-version: 11.0.100
 
       - name: Restore tests
         run: dotnet restore test/Soenneker.Extensions.Spans.Readonly.Chars.Tests/Soenneker.Extensions.Spans.Readonly.Chars.Tests.csproj --verbosity minimal
